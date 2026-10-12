@@ -1,0 +1,7 @@
+{
+  "name": "Haven - Realistic AI Companion Texting",
+  "description": "A deeply personal, realistic texting companion that talks, listens, and reacts like a real person who cares about you.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
