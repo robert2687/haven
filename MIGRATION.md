@@ -12,7 +12,7 @@ alongside it until cutover.
 | Reasoning subagent | `POST /api/subagent` (Nemotron nano, nvidia pin) | `routers/subagent.py` (same model/pin, `reasoning_details` passthrough) |
 | TTS | `POST /api/voice-note` (Gemini WAV), `POST /api/edge-tts` (MP3) | `routers/tts.py` (Edge TTS, same data-URI shape) |
 | STT | Browser SpeechRecognition only | `POST /api/stt` (Faster-Whisper Base) |
-| Memory | In-memory + localStorage | Supabase `memories` + pgvector (`routers/memory.py`, `supabase/migrations.sql`) |
+| Memory | In-memory + localStorage | Supabase `memories` + pgvector (`routers/memory.py`, `database/migrations/`, canonical full schema in `database/schema.sql`) |
 | Avatars/uploads | `public/assets/images/` | Supabase Storage (`routers/storage.py`) |
 | Companion extras | daily/starter/appearance/coach/future/checkin/custom | `routers/companions.py` (same shapes, static fallbacks without AI key) |
 
@@ -25,7 +25,10 @@ alongside it until cutover.
 ## Cutover checklist
 
 1. `pip install -r backend/requirements.txt` + `uvicorn app.main:app` (from `backend/`)
-2. Apply `backend/supabase/migrations.sql` in Supabase SQL editor
+2. Apply the DB schema in Supabase SQL editor (pick ONE): `database/schema.sql`
+   (full snapshot) or `database/migrations/0001–0005` in order, then
+   `infra/supabase/policies.sql` for RLS. (`backend/supabase/migrations.sql`
+   is a stale partial snapshot — do not use it as the canonical source.)
 3. `npm install && npm run dev` (from `frontend/`) with `NEXT_PUBLIC_API_URL` set
 4. Set Vercel env vars; deploy `frontend/`
 5. Point OpenShift service at `backend/` (`GET /health` probes)

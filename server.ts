@@ -21,6 +21,19 @@ const PORT = Number(process.env.PORT) || 3000;
 
 app.use(express.json({ limit: '20mb' }));
 
+// Minimal CORS so the Next.js frontend (different origin/port) can call the API.
+// Mirrors the FastAPI backend's permissive dev policy (no credentials).
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') {
+    res.status(204).end();
+    return;
+  }
+  next();
+});
+
 // ---- AI provider config ----
 // 'gemini' (default) uses @google/genai for everything.
 // 'openrouter' routes /api/chat (+ /api/chat/stream) through OpenRouter;
@@ -896,6 +909,16 @@ app.post('/api/edge-tts', async (req: Request, res: Response) => {
   } finally {
     await fs.unlink(tmpFile).catch(() => {});
   }
+});
+
+// POST /api/stt: not implemented in the Express server (no Whisper here).
+// The Next.js voice UI posts multipart `audio` to this path. Return an
+// actionable 501 (instead of a generic 404) pointing at the Python backend
+// that actually implements STT: backend/app/routers/stt.py via Faster-Whisper.
+app.post('/api/stt', (_req: Request, res: Response) => {
+  res.status(501).json({
+    error: 'STT is not implemented in server.ts. Use the FastAPI backend (POST /api/stt, Faster-Whisper) with NEXT_PUBLIC_API_URL=http://localhost:8080.',
+  });
 });
 
 // Context-aware fallback engine honoring prompt rules when API key is in transition

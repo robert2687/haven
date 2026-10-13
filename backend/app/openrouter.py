@@ -43,7 +43,7 @@ class OpenRouterClient:
     def __init__(
         self,
         api_key: str,
-        site_url: str = "http://localhost:3000",
+        site_url: str = "http://localhost:8080",
         title: str = "Haven AI Companion",
         timeout: float = 120.0,
     ) -> None:

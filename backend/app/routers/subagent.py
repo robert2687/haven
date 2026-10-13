@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Any
 
 import httpx
 from fastapi import APIRouter
@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from ..config import get_settings
-from ..openrouter import BASE_URL
+from ..openrouter import BASE_URL, provider_pin
 
 router = APIRouter()
 
@@ -65,8 +65,10 @@ async def subagent(body: SubagentRequest) -> JSONResponse:
         "model": model,
         "messages": messages,
         "reasoning": {"enabled": True},
-        "provider": {"only": [settings.subagent_provider_only], "allow_fallbacks": False},
     }
+    pin = provider_pin(settings.subagent_provider_only)
+    if pin:
+        payload["provider"] = pin
     try:
         async with httpx.AsyncClient(timeout=180.0) as client:
             res = await client.post(f"{BASE_URL}/chat/completions", headers=headers, json=payload)

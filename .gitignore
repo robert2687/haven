@@ -5,9 +5,14 @@ coverage/
 .DS_Store
 *.log
 .env*
-!.env.example
+!**/*.example
 package-lock.json
 __pycache__/
 *.py[cod]
 .venv/
 venv/
+.next/
+next-env.d.ts
+*.tsbuildinfo
+frontend/.next/
+hf-cache/
