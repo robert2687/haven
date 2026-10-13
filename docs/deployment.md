@@ -23,7 +23,7 @@
 2. Create secret (never commit values):
    `oc create secret generic haven-backend-env
      --from-literal=OPENROUTER_API_KEY=...
-     --from-literal=EMBEDDING_MODEL=<768-dim model>
+     --from-literal=EMBEDDING_MODEL=baai/bge-base-en-v1.5
      --from-literal=SUPABASE_URL=...
      --from-literal=SUPABASE_KEY=<service-role>
      --from-literal=SITE_URL=https://<vercel-app>`
@@ -52,5 +52,6 @@ Sandbox notes:
 - Inkling/mood: `INKLING_MODEL`. Subagent: `SUBAGENT_MODEL` (+ `*_PROVIDER_ONLY` pins).
 - Embeddings: `EMBEDDING_MODEL` must emit **768-dim** vectors
   (`document_chunks.embedding vector(768)`).
+  Default `baai/bge-base-en-v1.5` (native 768-dim, verified live).
 - Free-tier rate limits apply; `/api/chat` falls back to canned bubbles on
   upstream failure (`backend/app/routers/chat.py`).
