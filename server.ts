@@ -1361,7 +1361,10 @@ async function setupViteOrStatic() {
   } else {
     const { createServer } = await import('vite');
     const vite = await createServer({
-      server: { middlewareMode: true, host: '0.0.0.0', port: 3000 },
+      // Express owns the HTTP server in middleware mode, so Vite cannot
+      // attach its HMR WebSocket here. Disable the client to avoid reconnect
+      // errors in the preview while keeping the middleware-based dev server.
+      server: { middlewareMode: true, host: '0.0.0.0', port: 3000, hmr: false },
       appType: 'spa',
     });
     app.use(vite.middlewares);
