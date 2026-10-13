@@ -9,7 +9,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export default defineConfig(() => {
   return {
     plugins: [
-      react(),
+      // The hosted preview serves through Express without a Vite HMR websocket.
+      // Disable the React refresh preamble so it does not import createHotContext
+      // from the preview's incompatible /@vite/client shim.
+      react({ fastRefresh: false }),
       tailwindcss(),
       {
         name: 'disable-preview-hmr-client',
