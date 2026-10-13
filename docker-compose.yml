@@ -1,0 +1,42 @@
+# OpenCode local backend (FastAPI + Faster-Whisper + Edge TTS on Supabase).
+#
+# Prereq: copy backend/.env.example -> backend/.env and fill it in
+# (OPENROUTER_API_KEY, EMBEDDING_MODEL, SUPABASE_URL, SUPABASE_KEY).
+#
+# The frontend is NOT here: it deploys to Vercel, and for local dev run
+# `cd frontend && npm run dev` on the host with
+# NEXT_PUBLIC_API_URL=http://localhost:8080.
+#
+# Start:  docker compose up --build
+# Health: http://localhost:8080/health
+# Docs:   http://localhost:8080/docs
+
+services:
+  backend:
+    build:
+      context: ./backend
+    image: opencode-backend:local
+    container_name: opencode-backend
+    env_file:
+      - ./backend/.env
+    environment:
+      PORT: "8080"
+      # Faster-Whisper downloads the base weights (~150MB) on first STT call;
+      # the named volume below keeps them across restarts instead of
+      # re-downloading after every `compose up`.
+      HF_HUB_CACHE: /opt/hf-cache
+      XDG_CACHE_HOME: /tmp/cache
+    ports:
+      - "8080:8080"
+    volumes:
+      - whisper-cache:/opt/hf-cache
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    restart: unless-stopped
+
+volumes:
+  whisper-cache:

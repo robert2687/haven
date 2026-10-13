@@ -10,6 +10,7 @@ response shapes mirror ``server.ts`` exactly.
 from __future__ import annotations
 
 import base64
+import logging
 import time
 from typing import Any
 
@@ -18,11 +19,13 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from ..config import get_settings
+from ..openrouter import provider_pin
 from ..schemas import ChatRequest, safe_parse_json
 from ..services.edge_tts import MODULATION_PRESETS, resolve_edge_voice, synthesize_mp3
 from ..system_prompt import build_system_instruction
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 VOICE_STYLE_MAP: dict[str, str] = {
@@ -53,18 +56,25 @@ async def _gen_json_or(
         client = AsyncOpenAI(
             base_url=OPENROUTER_BASE_URL, api_key=settings.openrouter_api_key
         )
-        resp = await client.chat.completions.create(
-            model=settings.chat_model,
-            messages=[
+        create_kwargs: dict[str, Any] = {
+            "model": settings.chat_model,
+            "messages": [
                 {"role": "system", "content": system},
                 {"role": "user", "content": prompt},
             ],
-            temperature=temperature,
-            response_format={"type": "json_object"},
-        )
+            "temperature": temperature,
+            "response_format": {"type": "json_object"},
+        }
+        pin = provider_pin(settings.openrouter_provider_only)
+        if pin:
+            create_kwargs["extra_body"] = {"provider": pin}
+        resp = await client.chat.completions.create(**create_kwargs)  # type: ignore[arg-type]
         text = resp.choices[0].message.content or "{}"
         return safe_parse_json(text, fallback() if callable(fallback) else fallback)
-    except Exception:
+    except Exception as exc:
+        # Static fallback by design (works without an AI key), but log the
+        # cause so operators can tell fallback replies from model replies.
+        logger.warning("companion generation failed, returning fallback: %s", exc)
         return fallback() if callable(fallback) else fallback
 
 

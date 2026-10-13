@@ -1,5 +1,10 @@
 # OpenCode AI Companion
 
+> Two stacks live in this repo (see `MIGRATION.md` for the cutover map):
+> - **Legacy:** Express `server.ts` + Vite React app in `src/` (`npm run dev`, port 3000).
+> - **Current:** Next.js 15 frontend in `frontend/` + FastAPI backend in `backend/`
+>   (port 8080). This README documents the current stack.
+
 OpenCode is an open-source AI companion platform designed for voice-first
 conversations, long-term memory, and agent-based workflows. Built entirely
 on a free-tier stack, OpenCode combines modern AI models, speech
