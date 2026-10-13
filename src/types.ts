@@ -2,6 +2,19 @@ export type RelationshipType = 'partner' | 'boyfriend' | 'girlfriend';
 
 export type VoiceOption = 'Zephyr' | 'Kore' | 'Puck' | 'Fenrir' | 'Charon';
 
+export interface CharacterAppearance {
+  summary: string;
+  facialFeatures: string;
+  hairColorAndStyle: string;
+  eyeColor: string;
+  bodyType: string;
+  clothingStyle: string;
+  ageRange: string;
+  culturalEthnic?: string;
+  aestheticStyle: string;
+  lastUpdated?: string;
+}
+
 export interface CompanionProfile {
   id: string;
   name: string;
@@ -12,6 +25,8 @@ export interface CompanionProfile {
   voice: VoiceOption;
   locale: string;
   memories: string[];
+  appearance: CharacterAppearance;
+  avatarGallery?: string[];
 }
 
 export interface UserProfile {

@@ -27,9 +27,18 @@ export default function App() {
   const [companion, setCompanion] = useState<CompanionProfile>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_COMPANION);
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (!parsed.appearance) {
+          const match = COMPANION_PRESETS.find(
+            (p) => p.id === parsed.id || p.name.toLowerCase() === parsed.name.toLowerCase()
+          );
+          parsed.appearance = match?.appearance || COMPANION_PRESETS[0].appearance;
+        }
+        return parsed;
+      }
     } catch {}
-    return COMPANION_PRESETS[0]; // Sam
+    return COMPANION_PRESETS[0]; // Sophia
   });
 
   const [user, setUser] = useState<UserProfile>(() => {
@@ -59,7 +68,7 @@ export default function App() {
       {
         id: 'init-2',
         role: 'assistant',
-        content: 'did that guy in your office end up microwaving fish again or are you safe?',
+        content: "was just heading out for a quick coffee walk and thought of you. staying warm?",
         timestamp: timeStr,
         status: 'read',
       },
@@ -190,6 +199,7 @@ export default function App() {
           relationship: companion.relationship,
           persona: companion.persona,
           tastesAndQuirks: companion.tastesAndQuirks,
+          appearance: companion.appearance,
           memories: companion.memories,
           locale: companion.locale,
           history,

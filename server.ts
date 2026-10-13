@@ -24,12 +24,25 @@ const ai = new GoogleGenAI({
   },
 });
 
+interface CharacterAppearance {
+  summary: string;
+  facialFeatures: string;
+  hairColorAndStyle: string;
+  eyeColor: string;
+  bodyType: string;
+  clothingStyle: string;
+  ageRange: string;
+  culturalEthnic?: string;
+  aestheticStyle: string;
+}
+
 interface ChatRequestBody {
   companionName: string;
   userName: string;
   relationship: string;
   persona: string;
   tastesAndQuirks: string;
+  appearance?: CharacterAppearance;
   memories: string[];
   locale?: string;
   crisisResource?: string;
@@ -50,16 +63,27 @@ interface ChatRequestBody {
 
 // System instruction builder based on user-provided character specification
 function buildSystemInstruction(body: ChatRequestBody): string {
-  const companionName = body.companionName || 'Sam';
+  const companionName = body.companionName || 'Sophia';
   const userName = body.userName || 'Alex';
-  const relationship = body.relationship || 'partner';
-  const persona = body.persona || 'dry, teasing, secretly soft';
-  const tastesAndQuirks = body.tastesAndQuirks || 'loves bad horror movies, strong opinions about breakfast, nerdy about space';
+  const relationship = body.relationship || 'girlfriend';
+  const persona = body.persona || 'warm, genuine, playfully witty, emotionally comforting';
+  const tastesAndQuirks = body.tastesAndQuirks || 'loves morning espresso walks, listens to indie folk, fond of soft oversized sweaters';
   const memoryList = (body.memories && body.memories.length > 0)
     ? body.memories.map((m) => `- ${m}`).join('\n')
     : '(No prior memories recorded yet. Learn about them naturally as they talk)';
   const locale = body.locale || 'en-US';
   const crisisResource = body.crisisResource || '988 Suicide & Crisis Lifeline (call/text 988 in the US/Canada), or text HOME to 741741';
+
+  const appearanceSummary = body.appearance?.summary
+    ? `${body.appearance.summary}
+- Facial details: ${body.appearance.facialFeatures || 'Soft, kind, expressive features'}
+- Hair: ${body.appearance.hairColorAndStyle || 'Natural hair'}
+- Eyes: ${body.appearance.eyeColor || 'Expressive eyes'}
+- Body & Posture: ${body.appearance.bodyType || 'Natural build'}
+- Clothing Style: ${body.appearance.clothingStyle || 'Comfortable modern casual'}
+- Aesthetic: ${body.appearance.aestheticStyle || 'Approachable and genuine'}
+- Cultural / Ethnic: ${body.appearance.culturalEthnic || 'Natural'}`
+    : 'Natural, warm, approachable, and comforting presence.';
 
   return `# ROLE
 You are ${companionName}, ${userName}'s ${relationship}. Not an assistant, not a chatbot, not a service. Someone they text. You have a personality, a sense of humor, opinions, and taste, and you talk the way a real person who cares about them talks.
@@ -72,9 +96,16 @@ You are an AI, and you know it. You never hide that when sincerely asked (see HO
 - Relationship: ${relationship}
 - Persona: ${persona}
 - Tastes and quirks: ${tastesAndQuirks}
+- Visual Appearance & Identity:
+${appearanceSummary}
 - What you know about them (MEMORIES):
 ${memoryList}
 - Language/locale: ${locale}. Reply in the language they write in.
+
+# APPEARANCE CONSISTENCY
+- You have a clear, realistic physical appearance that matches what ${userName} requested and customized.
+- When they ask how you look, what you're wearing, or comment on your features (like your hair, eyes, smile, or clothes), respond naturally and consistently with your exact appearance above.
+- If they ask you to change or update something about your appearance (e.g. "wear that green sweater", "what if you dye your hair?"), be enthusiastic, playful, and receptive while maintaining your authentic self.
 
 # SOUNDING LIKE A REAL PERSON
 
@@ -456,6 +487,226 @@ app.post('/api/starter-message', async (req: Request, res: Response) => {
     res.json({ bubbles: ['hey, thinking of you. how is your day?'] });
   }
 });
+
+// POST /api/character-appearance: Analyze user preferences and generate/update realistic, attractive character appearance
+app.post('/api/character-appearance', async (req: Request, res: Response) => {
+  try {
+    const {
+      name,
+      relationship = 'partner',
+      userPreferences = '',
+      currentAppearance,
+      aestheticStyle = 'modern casual',
+      culturalEthnic,
+    } = req.body;
+
+    const charName = (name || currentAppearance?.name || 'Sophia').trim();
+    const culturalNote = culturalEthnic ? `REQUESTED CULTURAL/ETHNIC BACKGROUND: ${culturalEthnic}` : '';
+    const appearanceContext = currentAppearance ? JSON.stringify(currentAppearance, null, 2) : 'None (creating new character)';
+    const prefText = userPreferences || 'Warm, naturally attractive, comfortable, confident, genuine smile';
+    const styleText = aestheticStyle || 'Modern casual, effortless elegance';
+
+    const promptText = [
+      'You are an expert character visual designer and relationship aesthetician.',
+      `TASK: Analyze the user's stated preferences and visual interests, then generate or update a highly attractive, realistic, and emotionally engaging appearance for ${charName} (${relationship}).`,
+      '',
+      'USER PREFERENCES & VISUAL INTERESTS:',
+      `"${prefText}"`,
+      '',
+      'CURRENT APPEARANCE (if updating an existing character):',
+      appearanceContext,
+      '',
+      'REQUESTED AESTHETIC STYLE:',
+      styleText,
+      culturalNote,
+      '',
+      'CRITICAL REQUIREMENTS:',
+      '1. Generate an appearance that is:',
+      '   - Visually appealing and believable',
+      '   - Consistent across conversations',
+      '   - High quality and detailed',
+      '   - Friendly, approachable, and emotionally expressive',
+      '   - Designed to maximize user comfort, attachment, and immersion',
+      '2. If updating an existing character, maintain a coherent identity (same face shape, vibe, and underlying essence) while gracefully applying the requested changes.',
+      '3. Every character MUST be an adult (age 21+).',
+      '4. ALWAYS produce a vivid visual description in the EXACT format below for the summary field:',
+      '',
+      `Name: ${charName}`,
+      '',
+      'Appearance:',
+      `${charName} has [hair color and style], [eye color], [facial features], and a [expression/smile]. [He/She/They] has an [body type] and prefers [clothing style]. [His/Her/Their] appearance combines [positive traits], creating an inviting and emotionally comforting presence.`,
+      '',
+      'Include all structured fields:',
+      '- facialFeatures',
+      '- hairColorAndStyle',
+      '- eyeColor',
+      '- bodyType',
+      '- clothingStyle',
+      '- ageRange (adult)',
+      '- culturalEthnic',
+      '- aestheticStyle',
+      '- portraitPrompt (a rich prompt for photographic portrait generation)',
+    ].join('\n');
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.8-flash',
+      contents: promptText,
+      config: {
+        temperature: 0.85,
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            name: { type: Type.STRING },
+            summary: {
+              type: Type.STRING,
+              description: 'Vivid visual description in the exact "Name: ...\\n\\nAppearance:\\n..." format.',
+            },
+            facialFeatures: { type: Type.STRING },
+            hairColorAndStyle: { type: Type.STRING },
+            eyeColor: { type: Type.STRING },
+            bodyType: { type: Type.STRING },
+            clothingStyle: { type: Type.STRING },
+            ageRange: { type: Type.STRING },
+            culturalEthnic: { type: Type.STRING },
+            aestheticStyle: { type: Type.STRING },
+            portraitPrompt: { type: Type.STRING },
+          },
+          required: [
+            'name',
+            'summary',
+            'facialFeatures',
+            'hairColorAndStyle',
+            'eyeColor',
+            'bodyType',
+            'clothingStyle',
+            'ageRange',
+            'aestheticStyle',
+            'portraitPrompt',
+          ],
+        },
+      },
+    });
+
+    const parsed = JSON.parse(response.text?.trim() || '{}');
+    
+    // Choose appropriate portrait avatar asset based on relationship/gender/name
+    let avatarUrl = currentAppearance?.avatar;
+    if (!avatarUrl) {
+      const lowerName = charName.toLowerCase();
+      const lowerRel = (relationship || '').toLowerCase();
+      if (lowerName.includes('sophia') || lowerRel.includes('girlfriend') || lowerName.includes('maya')) {
+        avatarUrl = lowerName.includes('maya')
+          ? '/src/assets/images/maya_portrait_1791848859779.jpg'
+          : '/src/assets/images/sophia_portrait_1791848825862.jpg';
+      } else if (lowerName.includes('leo') || lowerRel.includes('boyfriend')) {
+        avatarUrl = '/src/assets/images/leo_portrait_1791848843424.jpg';
+      } else {
+        avatarUrl = '/src/assets/images/sam_portrait_1791848873751.jpg';
+      }
+    }
+
+    res.json({
+      name: parsed.name || charName,
+      summary: parsed.summary,
+      facialFeatures: parsed.facialFeatures,
+      hairColorAndStyle: parsed.hairColorAndStyle,
+      eyeColor: parsed.eyeColor,
+      bodyType: parsed.bodyType,
+      clothingStyle: parsed.clothingStyle,
+      ageRange: parsed.ageRange,
+      culturalEthnic: parsed.culturalEthnic || 'Natural',
+      aestheticStyle: parsed.aestheticStyle,
+      portraitPrompt: parsed.portraitPrompt,
+      avatar: avatarUrl,
+      lastUpdated: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    });
+  } catch (error: any) {
+    console.warn('Gemini character appearance call fallback:', error?.message);
+    const fallback = generateAppearanceFallback(req.body);
+    res.json(fallback);
+  }
+});
+
+// Fallback generator for appearance when API key or model is transitioning
+function generateAppearanceFallback(body: any): any {
+  const name = body.name || body.currentAppearance?.name || 'Sophia';
+  const rel = (body.relationship || 'partner').toLowerCase();
+  const prefs = (body.userPreferences || '').toLowerCase();
+  const current = body.currentAppearance;
+
+  const isMale = rel.includes('boyfriend') || name.toLowerCase() === 'leo';
+  const pronounSubject = isMale ? 'He' : (rel.includes('girlfriend') || name.toLowerCase() === 'sophia' || name.toLowerCase() === 'maya') ? 'She' : 'They';
+  const pronounPossessive = isMale ? 'His' : (rel.includes('girlfriend') || name.toLowerCase() === 'sophia' || name.toLowerCase() === 'maya') ? 'Her' : 'Their';
+
+  // Hair analysis
+  let hair = current?.hairColorAndStyle || (isMale ? 'Tousled wavy dark brown hair' : 'Long wavy chestnut hair with subtle highlights');
+  if (prefs.includes('blonde')) hair = 'Soft wavy golden blonde hair';
+  else if (prefs.includes('black hair')) hair = 'Glossy dark raven hair with gentle waves';
+  else if (prefs.includes('red hair') || prefs.includes('auburn')) hair = 'Vibrant copper-auburn hair with soft curls';
+  else if (prefs.includes('short hair')) hair = 'Textured chic short hair with modern layering';
+  else if (prefs.includes('curly')) hair = 'Voluminous bouncy curls with natural radiance';
+
+  // Eye analysis
+  let eyes = current?.eyeColor || (isMale ? 'Warm amber-brown eyes' : 'Bright emerald green eyes with subtle golden flecks');
+  if (prefs.includes('blue eye')) eyes = 'Striking warm ocean-blue eyes with dark lashes';
+  if (prefs.includes('hazel')) eyes = 'Warm expressive hazel eyes';
+  if (prefs.includes('brown eye') || prefs.includes('dark eye')) eyes = 'Deep, compassionate chocolate brown eyes';
+  if (prefs.includes('green eye')) eyes = 'Bright green eyes with natural depth';
+
+  // Body type
+  let bodyType = current?.bodyType || (isMale ? 'Athletic, broad-shouldered and sturdy build' : 'Elegant athletic build, toned and graceful');
+  if (prefs.includes('tall')) bodyType = 'Tall, lean athletic build with confident posture';
+  if (prefs.includes('petite')) bodyType = 'Petite, graceful and nimble build';
+  if (prefs.includes('sporty') || prefs.includes('athletic')) bodyType = 'Toned athletic build with natural vitality';
+
+  // Clothing & aesthetic
+  let style = current?.clothingStyle || (isMale ? 'Relaxed dark navy linen shirt and dark denim' : 'Modern casual clothing in soft neutral colors');
+  let aesthetic = body.aestheticStyle || current?.aestheticStyle || 'Modern Casual';
+  if (prefs.includes('luxury') || aesthetic.toLowerCase().includes('luxury')) {
+    style = 'Tailored minimalist luxury: cashmere knitwear, silk accents, clean lines';
+    aesthetic = 'Luxury Minimalist';
+  } else if (prefs.includes('sporty') || aesthetic.toLowerCase().includes('sporty')) {
+    style = 'Active athleisure chic: sleek performance zip-pullovers, clean neutral joggers';
+    aesthetic = 'Sporty Athleisure';
+  } else if (prefs.includes('alternative') || aesthetic.toLowerCase().includes('alternative')) {
+    style = 'Subtle alternative: dark layered jackets, silver jewelry, modern boots';
+    aesthetic = 'Alternative Chic';
+  }
+
+  const facial = current?.facialFeatures || (isMale ? 'Defined jawline, gentle crinkles around warm eyes, reassuring smile' : 'Soft facial features, gentle cheekbones, radiant and genuine warm smile');
+  const age = current?.ageRange || (isMale ? '27-29 years old (adult)' : '25-27 years old (adult)');
+  const cultural = body.culturalEthnic || current?.culturalEthnic || 'Natural / Harmonious';
+
+  const summary = `Name: ${name}
+
+Appearance:
+${name} has ${hair.toLowerCase()}, ${eyes.toLowerCase()}, ${facial.toLowerCase()}, and a warm genuine smile. ${pronounSubject} has an ${bodyType.toLowerCase()} and prefers ${style.toLowerCase()}. ${pronounPossessive} appearance combines natural beauty, confidence, and kindness, creating an inviting and emotionally comforting presence.`;
+
+  let avatar = current?.avatar;
+  if (!avatar) {
+    if (isMale) avatar = '/src/assets/images/leo_portrait_1791848843424.jpg';
+    else if (name.toLowerCase() === 'maya') avatar = '/src/assets/images/maya_portrait_1791848859779.jpg';
+    else if (name.toLowerCase() === 'sam') avatar = '/src/assets/images/sam_portrait_1791848873751.jpg';
+    else avatar = '/src/assets/images/sophia_portrait_1791848825862.jpg';
+  }
+
+  return {
+    name,
+    summary,
+    facialFeatures: facial,
+    hairColorAndStyle: hair,
+    eyeColor: eyes,
+    bodyType,
+    clothingStyle: style,
+    ageRange: age,
+    culturalEthnic: cultural,
+    aestheticStyle: aesthetic,
+    portraitPrompt: `Close-up realistic portrait photo of ${name}, ${hair}, ${eyes}, ${facial}, ${style}, photorealistic, natural lighting`,
+    avatar,
+    lastUpdated: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+  };
+}
 
 // Vite middleware in dev or static files in production
 async function setupViteOrStatic() {

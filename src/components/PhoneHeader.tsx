@@ -80,6 +80,7 @@ export const PhoneHeader: React.FC<PhoneHeaderProps> = ({
             <img
               src={companion.avatar}
               alt={companion.name}
+              referrerPolicy="no-referrer"
               className="w-10 h-10 rounded-full object-cover ring-2 ring-blue-500/30"
             />
             {/* Active green indicator */}
