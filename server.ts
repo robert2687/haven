@@ -1360,21 +1360,37 @@ async function setupViteOrStatic() {
     });
   } else {
     const { createServer } = await import('vite');
-    const vite = await createServer({
-      // Express owns the HTTP server in middleware mode, so Vite cannot
-      // attach its HMR WebSocket here. Disable the client to avoid reconnect
-      // errors in the preview while keeping the middleware-based dev server.
-      server: { middlewareMode: true, host: '0.0.0.0', port: 3000, hmr: false },
-      appType: 'spa',
-    });
+  const vite = await createServer({
+    // Express owns the HTTP server in middleware mode, so Vite must not
+    // inject or serve its HMR client. The hosted preview has no Vite
+    // WebSocket endpoint, so allowing the client to load creates a reconnect
+    // error even though the application itself is healthy.
+    server: { middlewareMode: true, host: '0.0.0.0', port: 3000, hmr: false, ws: false },
+    appType: 'spa',
+    plugins: [
+      {
+        name: 'remove-vite-client-from-preview-html',
+        transformIndexHtml: {
+          order: 'post',
+          handler(html: string) {
+            return html
+              .replace(/<script[^>]*src=["'][^"']*\/\@vite\/(?:client|env)[^"']*["'][^>]*><\/script>/gi, '')
+              .replace(/(?:import|export)\s+[^;]*["']\/\@vite\/(?:client|env)[^"']*["'];?/gi, '')
+              .replace(/["']\/\@vite\/(?:client|env)[^"']*["']/gi, '');
+          },
+        },
+      },
+      },
+    ],
+  });
 
-    // Express owns the HTTP server, so there is no Vite WebSocket endpoint
-    // for the injected client to connect to. Return a harmless module for
-    // stale preview pages that still request /@vite/client.
-    app.get('/@vite/client', (_req, res) => {
-      res.type('application/javascript').send('export {};');
-    });
-    app.use(vite.middlewares);
+  // Also neutralize direct and query-string variants of the client path
+  // before Vite middleware sees them. This protects previews from stale HTML
+  // or an external refresh re-requesting the HMR client.
+  app.get(['/\@vite/client', '/\@vite/env'], (_req, res) => {
+    res.type('application/javascript').set('Cache-Control', 'no-store').send('export {};');
+  });
+  app.use(vite.middlewares);
   }
 
   app.listen(PORT, '0.0.0.0', () => {
