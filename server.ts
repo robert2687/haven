@@ -27,6 +27,11 @@ const CHAT_MODEL =
 // instead of silently routing to another provider.
 const OPENROUTER_PROVIDER_ONLY = process.env.OPENROUTER_PROVIDER_ONLY || '';
 
+// Reasoning subagent model (OpenRouter, NVIDIA Nemotron reasoning).
+const SUBAGENT_MODEL =
+  process.env.SUBAGENT_MODEL || 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free';
+const SUBAGENT_PROVIDER_ONLY = process.env.SUBAGENT_PROVIDER_ONLY || 'nvidia';
+
 if (AI_PROVIDER === 'openrouter' && !process.env.OPENROUTER_API_KEY) {
   console.warn('Warning: AI_PROVIDER=openrouter but OPENROUTER_API_KEY is not set. Chat will use local fallbacks.');
 }
@@ -716,6 +721,83 @@ app.post('/api/chat/stream', async (req: Request, res: Response) => {
       res.write(`data: ${JSON.stringify({ type: 'error', error: error?.message || 'Stream failed' })}\n\n`);
       res.end();
     }
+  }
+});
+
+// POST /api/subagent: multi-turn reasoning calls with preserved reasoning_details.
+// Body: { query?: string, system?: string, messages?: Array<{role, content, reasoning_details?}>, model? }
+// - One-shot: send { query } (plus optional system prompt).
+// - Multi-turn: send the full history back, keeping assistant messages'
+//   reasoning_details unmodified so the model continues reasoning where it left off:
+//   [{role:'user',content}, {role:'assistant',content,reasoning_details}, {role:'user',content}, ...]
+// Pinned to SUBAGENT_PROVIDER_ONLY with allow_fallbacks:false, so the upstream
+// error is returned instead of routing to another provider.
+// Returns: { message: { role, content, reasoning_details }, reasoning, usage, model }
+app.post('/api/subagent', async (req: Request, res: Response) => {
+  try {
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (!apiKey) {
+      res.status(400).json({ error: 'Subagent requires OPENROUTER_API_KEY' });
+      return;
+    }
+    const { query, system, messages: history, model } = req.body as {
+      query?: string;
+      system?: string;
+      messages?: Array<{ role: string; content: string; reasoning_details?: unknown }>;
+      model?: string;
+    };
+    const messages: Array<Record<string, unknown>> = [];
+    if (system) messages.push({ role: 'system', content: system });
+    if (Array.isArray(history) && history.length > 0) {
+      for (const m of history) {
+        const msg: Record<string, unknown> = { role: m.role, content: m.content };
+        // Pass reasoning_details back unmodified for reasoning continuation.
+        if (m.role === 'assistant' && m.reasoning_details !== undefined) {
+          msg.reasoning_details = m.reasoning_details;
+        }
+        messages.push(msg);
+      }
+    } else if (query && String(query).trim()) {
+      messages.push({ role: 'user', content: String(query) });
+    } else {
+      res.status(400).json({ error: 'Provide query or messages[]' });
+      return;
+    }
+
+    const upstream = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+        'HTTP-Referer': process.env.OPENROUTER_SITE_URL || 'http://localhost:3000',
+        'X-Title': 'Haven Subagent',
+      },
+      body: JSON.stringify({
+        model: model || SUBAGENT_MODEL,
+        messages,
+        reasoning: { enabled: true },
+        provider: { only: [SUBAGENT_PROVIDER_ONLY], allow_fallbacks: false },
+      }),
+    });
+    if (!upstream.ok) {
+      throw new Error(`OpenRouter ${upstream.status}: ${(await upstream.text()).slice(0, 500)}`);
+    }
+    const data = (await upstream.json()) as any;
+    const msg = data?.choices?.[0]?.message;
+    if (!msg) throw new Error('No message in OpenRouter response');
+    res.json({
+      message: {
+        role: 'assistant',
+        content: msg.content || '',
+        reasoning_details: msg.reasoning_details ?? null,
+      },
+      reasoning: msg.reasoning ?? null,
+      usage: data?.usage ?? null,
+      model: data?.model || model || SUBAGENT_MODEL,
+    });
+  } catch (error: any) {
+    console.error('Subagent error:', error?.message);
+    res.status(500).json({ error: error?.message || 'Subagent call failed' });
   }
 });
 
