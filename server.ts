@@ -24,6 +24,50 @@ const ai = new GoogleGenAI({
   },
 });
 
+const NEMOTRON_MODEL = 'nvidia/nemotron-3-ultra-550b-a55b:free';
+
+async function generateWithNemotron(input: {
+  system: string;
+  user: string;
+  temperature?: number;
+}) {
+  const apiKey = process.env.OPENROUTER_API_KEY_2;
+  if (!apiKey) {
+    throw new Error('OPENROUTER_API_KEY_2 is not configured');
+  }
+
+  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': 'https://haven.app',
+      'X-Title': 'Haven',
+    },
+    body: JSON.stringify({
+      model: NEMOTRON_MODEL,
+      messages: [
+        { role: 'system', content: input.system },
+        { role: 'user', content: input.user },
+      ],
+      temperature: input.temperature ?? 0.9,
+      response_format: { type: 'json_object' },
+      provider: { only: ['nvidia'], allow_fallbacks: false },
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`OpenRouter request failed: ${response.status} ${await response.text()}`);
+  }
+
+  const payload = await response.json() as {
+    choices?: Array<{ message?: { content?: string } }>;
+  };
+  const content = payload.choices?.[0]?.message?.content;
+  if (!content) throw new Error('Nemotron returned an empty response');
+  return JSON.parse(content);
+}
+
 interface CharacterAppearance {
   summary: string;
   facialFeatures: string;
@@ -797,37 +841,13 @@ app.post('/api/starter-message', async (req: Request, res: Response) => {
     const body: ChatRequestBody = req.body;
     const systemInstruction = buildSystemInstruction(body);
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
-      contents: [
-        {
-          role: 'user',
-          parts: [
-            {
-              text: `[SYSTEM CONTEXT: You haven't texted in a little while, or it's a new day. Send a natural, spontaneous text opening to ${body.userName || 'them'}. It could be a random thought, a curious question, checking in casually without pressure or guilt, or referencing something from what you know about them. Sound 100% human, casual, 1-2 short text bubbles.]`,
-            },
-          ],
-        },
-      ],
-      config: {
-        systemInstruction,
-        temperature: 0.95,
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            bubbles: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING },
-            },
-          },
-          required: ['bubbles'],
-        },
-      },
+    const parsed = await generateWithNemotron({
+      system: systemInstruction,
+      user: `[SYSTEM CONTEXT: You haven't texted in a little while, or it's a new day. Send a natural, spontaneous text opening to ${body.userName || 'them'}. It could be a random thought, a curious question, checking in casually without pressure or guilt, or referencing something from what you know about them. Sound 100% human, casual, 1-2 short text bubbles. Return JSON with a bubbles array of strings.]`,
+      temperature: 0.95,
     });
 
-    const parsed = JSON.parse(response.text?.trim() || '{"bubbles":["hey, how\'s your day going?"]}');
-    res.json({ bubbles: parsed.bubbles });
+    res.json({ bubbles: Array.isArray(parsed.bubbles) ? parsed.bubbles : [] });
   } catch (error: any) {
     console.error('Error in /api/starter-message:', error);
     res.json({ bubbles: ['hey, thinking of you. how is your day?'] });
