@@ -1374,8 +1374,9 @@ async function setupViteOrStatic() {
           order: 'post',
           handler(html: string) {
             return html
-              .replace(/<script[^>]*src=["'][^"']*\/\@vite\/client[^"']*["'][^>]*><\/script>/gi, '')
-              .replace(/<script[^>]*src=["'][^"']*\/\@vite\/env[^"']*["'][^>]*><\/script>/gi, '');
+              .replace(/<script[^>]*src=["'][^"']*\/\@vite\/(?:client|env)[^"']*["'][^>]*><\/script>/gi, '')
+              .replace(/(?:import|export)\s+[^;]*["']\/\@vite\/(?:client|env)[^"']*["'];?/gi, '')
+              .replace(/["']\/\@vite\/(?:client|env)[^"']*["']/gi, '');
           },
         },
       },
@@ -1386,7 +1387,7 @@ async function setupViteOrStatic() {
   // Also neutralize direct and query-string variants of the client path
   // before Vite middleware sees them. This protects previews from stale HTML
   // or an external refresh re-requesting the HMR client.
-  app.use(/^\/@vite\/(?:client|env)(?:\?.*)?$/, (_req, res) => {
+  app.get(['/\@vite/client', '/\@vite/env'], (_req, res) => {
     res.type('application/javascript').set('Cache-Control', 'no-store').send('export {};');
   });
   app.use(vite.middlewares);
