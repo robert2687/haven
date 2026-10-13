@@ -34,12 +34,21 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         audioElement.pause();
         setIsPlayingAudio(false);
       } else {
-        audioElement.play();
-        setIsPlayingAudio(true);
+        if (audioElement.ended) {
+          audioElement.currentTime = 0;
+        }
+        audioElement.play().then(() => {
+          setIsPlayingAudio(true);
+        }).catch((e) => {
+          console.error('Audio playback failed', e);
+        });
       }
     } else {
       const audio = new Audio(url);
-      audio.onended = () => setIsPlayingAudio(false);
+      audio.onended = () => {
+        setIsPlayingAudio(false);
+        audio.currentTime = 0;
+      };
       audio.onpause = () => setIsPlayingAudio(false);
       audio.play().then(() => {
         setIsPlayingAudio(true);
@@ -85,7 +94,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           >
             {/* Attached Image if any */}
             {message.image && (
-              <div className="mb-2 overflow-hidden rounded-xl">
+              <div className={`${message.content?.trim() ? 'mb-2' : ''} overflow-hidden rounded-xl`}>
                 <img
                   src={`data:${message.image.mimeType};base64,${message.image.data}`}
                   alt="Attachment"
@@ -97,51 +106,66 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
             {/* Voice Memo Player if message is audio or has audio */}
             {message.audioUrl ? (
-              <div className="flex items-center gap-3 py-1 min-w-[200px]">
-                <button
-                  type="button"
-                  onClick={() => togglePlayAudio(message.audioUrl!)}
-                  className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors shrink-0 ${
-                    isUser
-                      ? 'bg-white text-blue-600 hover:bg-slate-100'
-                      : 'bg-blue-600 text-white hover:bg-blue-500'
-                  }`}
-                  title={isPlayingAudio ? 'Pause' : 'Play voice memo'}
-                >
-                  {isPlayingAudio ? (
-                    <Pause className="w-4 h-4 fill-current" />
-                  ) : (
-                    <Play className="w-4 h-4 ml-0.5 fill-current" />
-                  )}
-                </button>
+              <div className="flex flex-col gap-2 py-1 min-w-[210px] sm:min-w-[240px]">
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => togglePlayAudio(message.audioUrl!)}
+                    className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors shrink-0 shadow-xs ${
+                      isUser
+                        ? 'bg-white text-blue-600 hover:bg-slate-100'
+                        : 'bg-blue-600 text-white hover:bg-blue-500'
+                    }`}
+                    title={isPlayingAudio ? 'Pause' : 'Play voice note'}
+                  >
+                    {isPlayingAudio ? (
+                      <Pause className="w-4 h-4 fill-current" />
+                    ) : (
+                      <Play className="w-4 h-4 ml-0.5 fill-current" />
+                    )}
+                  </button>
 
-                <div className="flex-1">
-                  <div className="flex items-center gap-0.5 h-6">
-                    {/* Simulated Voice Waveform bars */}
-                    {[40, 70, 95, 55, 80, 100, 60, 45, 90, 75, 40, 60, 85, 50, 65, 90].map((h, i) => (
-                      <span
-                        key={i}
-                        className={`w-1 rounded-full transition-all ${
-                          isPlayingAudio
-                            ? 'bg-blue-400 animate-pulse'
-                            : isUser
-                            ? 'bg-blue-200'
-                            : 'bg-slate-400'
-                        }`}
-                        style={{
-                          height: `${isPlayingAudio ? Math.max(20, Math.round(h * Math.random())) : h}%`,
-                        }}
-                      />
-                    ))}
+                  <div className="flex-1">
+                    <div className="flex items-center gap-0.5 h-6">
+                      {/* Simulated Voice Waveform bars */}
+                      {[40, 70, 95, 55, 80, 100, 60, 45, 90, 75, 40, 60, 85, 50, 65, 90].map((h, i) => (
+                        <span
+                          key={i}
+                          className={`w-1 rounded-full transition-all ${
+                            isPlayingAudio
+                              ? 'bg-blue-400 animate-pulse'
+                              : isUser
+                              ? 'bg-blue-200'
+                              : 'bg-slate-400'
+                          }`}
+                          style={{
+                            height: `${isPlayingAudio ? Math.max(20, Math.round(h * Math.random())) : h}%`,
+                          }}
+                        />
+                      ))}
+                    </div>
+                    <div className="flex items-center justify-between mt-0.5">
+                      <span className={`text-[11px] font-mono ${isUser ? 'text-blue-100' : 'text-slate-400'}`}>
+                        {isPlayingAudio ? 'Playing...' : isUser ? 'Voice note' : 'Voice memo'}
+                      </span>
+                      {message.audioDuration ? (
+                        <span className={`text-[10.5px] font-mono ${isUser ? 'text-blue-200' : 'text-slate-400'}`}>
+                          {Math.floor(message.audioDuration / 60)}:{(message.audioDuration % 60).toString().padStart(2, '0')}
+                        </span>
+                      ) : null}
+                    </div>
                   </div>
-                  <span className={`text-[11px] font-mono mt-0.5 block ${isUser ? 'text-blue-100' : 'text-slate-400'}`}>
-                    {isPlayingAudio ? 'Playing...' : 'Voice memo'}
-                  </span>
                 </div>
+
+                {message.content?.trim() ? (
+                  <p className={`whitespace-pre-wrap text-[13.5px] pt-1.5 border-t ${isUser ? 'border-blue-400/30 text-blue-50' : 'border-slate-700/60 text-slate-200'}`}>
+                    {message.content}
+                  </p>
+                ) : null}
               </div>
-            ) : (
+            ) : message.content?.trim() ? (
               <p className="whitespace-pre-wrap">{message.content}</p>
-            )}
+            ) : null}
 
             {/* Audio Voice Note action button for Companion's text bubbles */}
             {!isUser && !message.audioUrl && (
@@ -231,13 +255,27 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
       </div>
 
       {/* Meta Footer (Timestamp & Delivery Status) */}
-      <div className={`flex items-center gap-1 mt-1 px-1 text-[11px] text-slate-500 ${isUser ? 'mr-1' : 'ml-9'}`}>
+      <div className={`flex items-center gap-1.5 mt-1 px-1 text-[11px] text-slate-500 ${isUser ? 'mr-1' : 'ml-9'}`}>
         <span>{message.timestamp}</span>
-        {isUser && message.status && (
-          <span className="flex items-center gap-0.5 text-slate-400">
-            <CheckCheck className="w-3 h-3 text-blue-400" />
-            <span className="capitalize">{message.status}</span>
-          </span>
+        {isUser && (
+          <div className="flex items-center ml-0.5">
+            {(message.status === 'sending') ? (
+              <span className="flex items-center gap-1 text-slate-500 animate-pulse" title="Sending...">
+                <Loader2 className="w-3 h-3 animate-spin text-slate-400" />
+                <span className="text-[10.5px]">Sending</span>
+              </span>
+            ) : (message.status === 'delivered') ? (
+              <span className="flex items-center gap-1 text-slate-400 transition-colors duration-200" title="Delivered">
+                <CheckCheck className="w-3.5 h-3.5 text-slate-400" />
+                <span className="text-[10.5px]">Delivered</span>
+              </span>
+            ) : (
+              <span className="flex items-center gap-1 text-sky-400 transition-colors duration-200" title="Read">
+                <CheckCheck className="w-3.5 h-3.5 text-sky-400 drop-shadow-[0_0_3px_rgba(56,189,248,0.4)]" />
+                <span className="text-[10.5px] font-medium text-sky-400">Read</span>
+              </span>
+            )}
+          </div>
         )}
       </div>
 
