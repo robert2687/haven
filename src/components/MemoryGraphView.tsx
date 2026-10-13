@@ -178,7 +178,7 @@ export const MemoryGraphView: React.FC<MemoryGraphViewProps> = ({
                   className={`relative z-10 px-6 py-3 rounded-2xl border font-bold text-sm transition-all shadow-xl ${
                     selectedNodeId === 'node-user'
                       ? 'bg-blue-600 border-blue-400 text-white scale-110 ring-4 ring-blue-500/20'
-                      : 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-750'
+                      : 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700'
                   }`}
                 >
                   <div className="flex items-center gap-2">
@@ -254,7 +254,7 @@ export const MemoryGraphView: React.FC<MemoryGraphViewProps> = ({
                     <span className="text-xs font-semibold text-slate-300 block mb-1">
                       Entity Details:
                     </span>
-                    <p className="text-xs text-slate-400 leading-relaxed bg-slate-950/70 p-3 rounded-xl border border-slate-850">
+                    <p className="text-xs text-slate-400 leading-relaxed bg-slate-950/70 p-3 rounded-xl border border-slate-800">
                       {selectedNode.details}
                     </p>
                   </div>

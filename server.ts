@@ -14,6 +14,104 @@ const PORT = Number(process.env.PORT) || 3000;
 
 app.use(express.json({ limit: '20mb' }));
 
+// ---- AI provider config ----
+// 'gemini' (default) uses @google/genai for everything.
+// 'openrouter' routes /api/chat (+ /api/chat/stream) through OpenRouter;
+// appearance/TTS endpoints stay on Gemini (native structured output + audio).
+const AI_PROVIDER = (process.env.AI_PROVIDER || 'gemini').toLowerCase();
+const CHAT_MODEL =
+  process.env.CHAT_MODEL ||
+  (AI_PROVIDER === 'openrouter' ? 'nvidia/nemotron-3-ultra-550b-a55b:free' : 'gemini-3.8-flash');
+// Optional provider pin for OpenRouter streaming (e.g. "thinkingmachines/nvfp4").
+// allow_fallbacks is always false when pinned: the upstream error is returned
+// instead of silently routing to another provider.
+const OPENROUTER_PROVIDER_ONLY = process.env.OPENROUTER_PROVIDER_ONLY || '';
+
+if (AI_PROVIDER === 'openrouter' && !process.env.OPENROUTER_API_KEY) {
+  console.warn('Warning: AI_PROVIDER=openrouter but OPENROUTER_API_KEY is not set. Chat will use local fallbacks.');
+}
+if (!process.env.GEMINI_API_KEY) {
+  console.warn('Warning: GEMINI_API_KEY is not set. Gemini-backed endpoints (TTS/appearance) will use fallbacks.');
+}
+
+// Safely parse model JSON output. Models often wrap JSON in ```json fences,
+// so strip them and fall back instead of throwing.
+function safeParseJson(text: string | undefined, fallback: unknown = {}): any {
+  const raw = (text || '').trim();
+  if (!raw) return fallback;
+  const stripped = raw
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/, '')
+    .trim();
+  try {
+    return JSON.parse(stripped);
+  } catch {
+    return fallback;
+  }
+}
+
+// Non-streaming OpenRouter chat. Returns raw text (expected to be JSON per prompt).
+async function callOpenRouterChat(
+  systemInstruction: string,
+  contents: Array<{ role: string; parts: Array<Record<string, unknown>> }>
+): Promise<string> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) throw new Error('OPENROUTER_API_KEY is not set');
+  const messages = [
+    { role: 'system', content: systemInstruction },
+    ...contents.map((c) => ({
+      role: c.role === 'model' ? 'assistant' : 'user',
+      content: c.parts
+        .map((p) =>
+          typeof p.text === 'string'
+            ? p.text
+            : (p.inlineData as { mimeType?: string } | undefined)
+              ? `[image: ${(p.inlineData as { mimeType?: string }).mimeType || 'image'}]`
+              : ''
+        )
+        .filter(Boolean)
+        .join('\n'),
+    })),
+  ];
+  const body: Record<string, unknown> = {
+    model: CHAT_MODEL,
+    messages,
+    temperature: 0.95,
+    max_tokens: 4096,
+    response_format: {
+      type: 'json_schema',
+      json_schema: {
+        name: 'haven_chat',
+        strict: false,
+        schema: {
+          type: 'object',
+          properties: {
+            bubbles: { type: 'array', items: { type: 'string' } },
+            newMemory: { type: 'string' },
+            moodAnalysis: { type: 'object' },
+            memoryDeltas: { type: 'object' },
+          },
+          required: ['bubbles'],
+          additionalProperties: true,
+        },
+      },
+    },
+  };
+  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+      'HTTP-Referer': process.env.OPENROUTER_SITE_URL || 'http://localhost:3000',
+      'X-Title': 'Haven AI Companion',
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`OpenRouter ${res.status}: ${(await res.text()).slice(0, 500)}`);
+  const data = (await res.json()) as any;
+  return data?.choices?.[0]?.message?.content || '{}';
+}
+
 // Initialized Gemini AI instance
 const ai = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY,
@@ -53,6 +151,7 @@ interface ChatRequestBody {
   memories: string[];
   locale?: string;
   crisisResource?: string;
+  hasVoiceNote?: boolean;
   history: Array<{
     role: 'user' | 'assistant';
     content: string;
@@ -375,78 +474,248 @@ app.post('/api/chat', async (req: Request, res: Response) => {
       parts: latestParts,
     });
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
-      contents,
-      config: {
-        systemInstruction,
-        temperature: 0.95,
-        responseMimeType: 'application/json',
-        responseSchema: {
+    const chatSchema = {
+      type: Type.OBJECT,
+      properties: {
+        bubbles: {
+          type: Type.ARRAY,
+          items: { type: Type.STRING },
+          description: 'Array of 1 to 4 short text messages/fragments representing realistic sequential texting bubbles.',
+        },
+        newMemory: {
+          type: Type.STRING,
+          description: 'Any notable new fact, project, preference, or personal detail learned about the user in this interaction, or null/empty if none.',
+        },
+        moodAnalysis: {
           type: Type.OBJECT,
+          description: 'Current real-time mood intelligence evaluation based on latest user messages.',
           properties: {
-            bubbles: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING },
-              description: 'Array of 1 to 4 short text messages/fragments representing realistic sequential texting bubbles.',
-            },
-            newMemory: {
-              type: Type.STRING,
-              description: 'Any notable new fact, project, preference, or personal detail learned about the user in this interaction, or null/empty if none.',
-            },
-            moodAnalysis: {
-              type: Type.OBJECT,
-              description: 'Current real-time mood intelligence evaluation based on latest user messages.',
-              properties: {
-                happiness: { type: Type.INTEGER, description: 'Estimated happiness 0-100' },
-                energy: { type: Type.INTEGER, description: 'Estimated energy level 0-100' },
-                stress: { type: Type.INTEGER, description: 'Estimated stress level 0-100' },
-                loneliness: { type: Type.INTEGER, description: 'Estimated loneliness indicators 0-100' },
-                motivation: { type: Type.INTEGER, description: 'Estimated motivation level 0-100' },
-                dominantEmotion: { type: Type.STRING, description: 'Label e.g. Content, Overwhelmed, Energized, Lonely' },
-                adaptiveBehaviorNote: { type: Type.STRING, description: 'Short note on how the companion adapted their response' },
-              },
-            },
-            memoryDeltas: {
-              type: Type.OBJECT,
-              description: 'Structured personal memory details learned about the user.',
-              properties: {
-                lifeProfileUpdate: { type: Type.STRING },
-                goalUpdate: { type: Type.STRING },
-                relationshipUpdate: { type: Type.STRING },
-                emotionalPattern: { type: Type.STRING },
-              },
-            },
+            happiness: { type: Type.INTEGER, description: 'Estimated happiness 0-100' },
+            energy: { type: Type.INTEGER, description: 'Estimated energy level 0-100' },
+            stress: { type: Type.INTEGER, description: 'Estimated stress level 0-100' },
+            loneliness: { type: Type.INTEGER, description: 'Estimated loneliness indicators 0-100' },
+            motivation: { type: Type.INTEGER, description: 'Estimated motivation level 0-100' },
+            dominantEmotion: { type: Type.STRING, description: 'Label e.g. Content, Overwhelmed, Energized, Lonely' },
+            adaptiveBehaviorNote: { type: Type.STRING, description: 'Short note on how the companion adapted their response' },
           },
-          required: ['bubbles'],
+        },
+        memoryDeltas: {
+          type: Type.OBJECT,
+          description: 'Structured personal memory details learned about the user.',
+          properties: {
+            lifeProfileUpdate: { type: Type.STRING },
+            goalUpdate: { type: Type.STRING },
+            relationshipUpdate: { type: Type.STRING },
+            emotionalPattern: { type: Type.STRING },
+          },
         },
       },
-    });
+      required: ['bubbles'],
+    };
 
-    const text = response.text?.trim() || '{}';
-    let parsed: any;
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      parsed = { bubbles: [text] };
+    let text: string;
+    if (AI_PROVIDER === 'openrouter') {
+      text = (await callOpenRouterChat(systemInstruction, contents))?.trim() || '{}';
+    } else {
+      const response = await ai.models.generateContent({
+        model: CHAT_MODEL,
+        contents,
+        config: {
+          systemInstruction,
+          temperature: 0.95,
+          responseMimeType: 'application/json',
+          responseSchema: chatSchema,
+        },
+      });
+      text = response.text?.trim() || '{}';
     }
+    const parsed = safeParseJson(text, {});
 
     // Clean and validate bubbles
-    let bubbles = (parsed.bubbles || []).map((b: string) => b.trim()).filter((b: string) => b.length > 0);
+    let bubbles = (parsed.bubbles || []).map((b: unknown) => String(b).trim()).filter((b: string) => b.length > 0);
     if (bubbles.length === 0) {
       bubbles = ['hey, sorry, what was that?'];
     }
 
     res.json({
       bubbles,
-      newMemory: parsed.newMemory?.trim() || null,
+      newMemory: parsed.newMemory != null && String(parsed.newMemory).trim() ? String(parsed.newMemory).trim() : null,
       moodAnalysis: parsed.moodAnalysis || null,
       memoryDeltas: parsed.memoryDeltas || null,
     });
   } catch (error: any) {
-    console.warn('Gemini API call encountered an issue (e.g. key status), using persona response engine:', error?.message);
+    console.warn('Chat API call failed, using persona response engine:', error?.message);
     const fallback = generateCompanionFallback(req.body);
     res.json(fallback);
+  }
+});
+
+// POST /api/chat/stream: SSE streaming chat via OpenRouter, with reasoning tokens.
+// Events: {type:'start',model} -> {type:'content',content}* -> {type:'done',bubbles,newMemory,moodAnalysis,memoryDeltas,reasoningTokens}
+// On failure: {type:'error',error}
+app.post('/api/chat/stream', async (req: Request, res: Response) => {
+  try {
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (!apiKey) {
+      res.status(400).json({ error: 'Streaming requires OPENROUTER_API_KEY' });
+      return;
+    }
+    const body: ChatRequestBody = req.body;
+    const systemInstruction = buildSystemInstruction(body);
+
+    const contents: Array<{ role: string; parts: Array<Record<string, unknown>> }> = [];
+    const recentHistory = (body.history || []).slice(-14);
+    for (const msg of recentHistory) {
+      const parts: Array<Record<string, unknown>> = [];
+      if (msg.image && msg.image.data) {
+        parts.push({ inlineData: { mimeType: msg.image.mimeType || 'image/jpeg', data: msg.image.data } });
+      }
+      if (msg.content) parts.push({ text: msg.content });
+      contents.push({ role: msg.role === 'assistant' ? 'model' : 'user', parts });
+    }
+    const latestParts: Array<Record<string, unknown>> = [];
+    if (body.latestImage && body.latestImage.data) {
+      latestParts.push({ inlineData: { mimeType: body.latestImage.mimeType || 'image/jpeg', data: body.latestImage.data } });
+    }
+    if (body.latestMessage && body.latestMessage.trim()) {
+      latestParts.push({ text: body.latestMessage });
+    } else if (body.latestImage && body.latestImage.data) {
+      latestParts.push({ text: '[Sent a photo. React warmly and specifically in character.]' });
+    } else if (latestParts.length === 0) {
+      latestParts.push({ text: 'hey' });
+    }
+    contents.push({ role: 'user', parts: latestParts });
+
+    const messages = [
+      { role: 'system', content: systemInstruction },
+      ...contents.map((c) => ({
+        role: c.role === 'model' ? 'assistant' : 'user',
+        content: c.parts
+          .map((p) => (typeof p.text === 'string' ? p.text : '[image]'))
+          .filter(Boolean)
+          .join('\n'),
+      })),
+    ];
+
+    const orBody: Record<string, unknown> = {
+      model: CHAT_MODEL,
+      messages,
+      temperature: 0.95,
+      max_tokens: 4096,
+      stream: true,
+      include_reasoning: true,
+      response_format: {
+        type: 'json_schema',
+        json_schema: {
+          name: 'haven_chat',
+          strict: false,
+          schema: {
+            type: 'object',
+            properties: {
+              bubbles: { type: 'array', items: { type: 'string' } },
+              newMemory: { type: 'string' },
+              moodAnalysis: { type: 'object' },
+              memoryDeltas: { type: 'object' },
+            },
+            required: ['bubbles'],
+            additionalProperties: true,
+          },
+        },
+      },
+    };
+    // Pin to a single provider with no fallbacks when configured:
+    // the upstream error is returned instead of routing elsewhere.
+    if (OPENROUTER_PROVIDER_ONLY) {
+      orBody.provider = { only: [OPENROUTER_PROVIDER_ONLY], allow_fallbacks: false };
+    }
+
+    const upstream = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+        'HTTP-Referer': process.env.OPENROUTER_SITE_URL || 'http://localhost:3000',
+        'X-Title': 'Haven AI Companion',
+      },
+      body: JSON.stringify(orBody),
+    });
+    if (!upstream.ok || !upstream.body) {
+      throw new Error(`OpenRouter stream ${upstream.status}: ${(await upstream.text()).slice(0, 500)}`);
+    }
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    (res as any).flushHeaders?.();
+    const send = (data: unknown) => {
+      if (!res.writableEnded) res.write(`data: ${JSON.stringify(data)}\n\n`);
+    };
+    // If the client disconnects, stop reading upstream.
+    req.on('close', () => {
+      try {
+        (upstream.body as any)?.cancel?.();
+      } catch {}
+    });
+
+    send({ type: 'start', model: CHAT_MODEL });
+
+    const reader = upstream.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let fullContent = '';
+    let reasoningTokens = 0;
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const payload = line.slice(6).trim();
+          if (!payload || payload === '[DONE]') continue;
+          let chunk: any;
+          try {
+            chunk = JSON.parse(payload);
+          } catch {
+            continue;
+          }
+          const delta = chunk?.choices?.[0]?.delta as any;
+          if (typeof delta?.content === 'string' && delta.content) {
+            fullContent += delta.content;
+            send({ type: 'content', content: delta.content });
+          }
+          const rt = chunk?.usage?.completion_tokens_details?.reasoning_tokens
+            ?? chunk?.usage?.completionTokensDetails?.reasoningTokens;
+          if (typeof rt === 'number') reasoningTokens = rt;
+        }
+      }
+    } finally {
+      try {
+        reader.releaseLock();
+      } catch {}
+    }
+
+    const parsed = safeParseJson(fullContent, {});
+    const bubbles = (parsed.bubbles || []).map((b: unknown) => String(b).trim()).filter((b: string) => b.length > 0);
+    send({
+      type: 'done',
+      bubbles: bubbles.length > 0 ? bubbles : ['hey, sorry, what was that?'],
+      newMemory: parsed.newMemory != null && String(parsed.newMemory).trim() ? String(parsed.newMemory).trim() : null,
+      moodAnalysis: parsed.moodAnalysis || null,
+      memoryDeltas: parsed.memoryDeltas || null,
+      reasoningTokens,
+    });
+    res.end();
+  } catch (error: any) {
+    console.error('Streaming chat error:', error?.message);
+    if (!res.writableEnded && !res.headersSent) {
+      res.status(500).json({ error: error?.message || 'Stream failed' });
+    } else if (!res.writableEnded) {
+      res.write(`data: ${JSON.stringify({ type: 'error', error: error?.message || 'Stream failed' })}\n\n`);
+      res.end();
+    }
   }
 });
 
@@ -457,13 +726,12 @@ function generateCompanionFallback(body: ChatRequestBody): {
   moodAnalysis?: any;
   memoryDeltas?: any;
 } {
-  const name = body.companionName || 'Sam';
   const user = body.userName || 'Alex';
   const msg = (body.latestMessage || '').toLowerCase().trim();
   let bubbles: string[] = [];
   let newMemory: string | null = null;
 
-  if (msg.includes('voice note') || msg.includes('voice memo') || (body as any).hasVoiceNote) {
+  if (msg.includes('voice note') || msg.includes('voice memo') || body.hasVoiceNote) {
     bubbles = [
       'just listened to your voice note! 🎙️',
       'there is something so grounding about hearing your actual voice.',
@@ -628,7 +896,8 @@ app.post('/api/voice-note', async (req: Request, res: Response) => {
     const validVoices = ['Puck', 'Charon', 'Kore', 'Fenrir', 'Zephyr'];
     const selectedVoice = validVoices.includes(voiceName) ? voiceName : 'Zephyr';
 
-    // Emotional modulation mapping for Gemini TTS speechMetadata
+    // Emotional modulation mapping. Style is folded into the prompt text:
+    // Gemini TTS has no `speechMetadata` part field, so sending it fails the call.
     let resolvedStyle = style;
     if (!resolvedStyle) {
       switch (emotionalModulation) {
@@ -652,6 +921,9 @@ app.post('/api/voice-note', async (req: Request, res: Response) => {
       }
     }
 
+    const trimmedText = String(text).trim().slice(0, 5000);
+    const styledText = `Say in a ${resolvedStyle} voice: ${trimmedText}`;
+
     const response = await ai.models.generateContent({
       model: 'gemini-3.8-flash-lite-tts',
       contents: [
@@ -659,10 +931,7 @@ app.post('/api/voice-note', async (req: Request, res: Response) => {
           role: 'user',
           parts: [
             {
-              text,
-              speechMetadata: {
-                style: resolvedStyle,
-              },
+              text: styledText,
             },
           ],
         },
@@ -763,7 +1032,7 @@ Sound 100% human, caring, and realistic. Never sound like a corporate planner or
       },
     });
 
-    const parsed = JSON.parse(response.text?.trim() || '{}');
+    const parsed = safeParseJson(response.text, {});
     res.json(parsed);
   } catch (error: any) {
     console.warn('Daily companion fallback activated:', error?.message);
@@ -826,8 +1095,11 @@ app.post('/api/starter-message', async (req: Request, res: Response) => {
       },
     });
 
-    const parsed = JSON.parse(response.text?.trim() || '{"bubbles":["hey, how\'s your day going?"]}');
-    res.json({ bubbles: parsed.bubbles });
+    const parsed = safeParseJson(response.text, { bubbles: ["hey, how's your day going?"] });
+    const starterBubbles = Array.isArray(parsed.bubbles) && parsed.bubbles.length > 0
+      ? parsed.bubbles.map((b: unknown) => String(b)).filter((b: string) => b.trim().length > 0)
+      : ["hey, thinking of you. how is your day?"];
+    res.json({ bubbles: starterBubbles });
   } catch (error: any) {
     console.error('Error in /api/starter-message:', error);
     res.json({ bubbles: ['hey, thinking of you. how is your day?'] });
@@ -934,7 +1206,7 @@ app.post('/api/character-appearance', async (req: Request, res: Response) => {
       },
     });
 
-    const parsed = JSON.parse(response.text?.trim() || '{}');
+    const parsed = safeParseJson(response.text, {});
     
     // Choose appropriate portrait avatar asset based on relationship/gender/name
     let avatarUrl = currentAppearance?.avatar;
@@ -943,27 +1215,27 @@ app.post('/api/character-appearance', async (req: Request, res: Response) => {
       const lowerRel = (relationship || '').toLowerCase();
       if (lowerName.includes('sophia') || lowerRel.includes('girlfriend') || lowerName.includes('maya')) {
         avatarUrl = lowerName.includes('maya')
-          ? '/src/assets/images/maya_portrait_1791848859779.jpg'
-          : '/src/assets/images/sophia_portrait_1791848825862.jpg';
+          ? '/assets/images/maya_portrait_1791848859779.jpg'
+          : '/assets/images/sophia_portrait_1791848825862.jpg';
       } else if (lowerName.includes('leo') || lowerRel.includes('boyfriend')) {
-        avatarUrl = '/src/assets/images/leo_portrait_1791848843424.jpg';
+        avatarUrl = '/assets/images/leo_portrait_1791848843424.jpg';
       } else {
-        avatarUrl = '/src/assets/images/sam_portrait_1791848873751.jpg';
+        avatarUrl = '/assets/images/sam_portrait_1791848873751.jpg';
       }
     }
 
     res.json({
       name: parsed.name || charName,
-      summary: parsed.summary,
-      facialFeatures: parsed.facialFeatures,
-      hairColorAndStyle: parsed.hairColorAndStyle,
-      eyeColor: parsed.eyeColor,
-      bodyType: parsed.bodyType,
-      clothingStyle: parsed.clothingStyle,
-      ageRange: parsed.ageRange,
-      culturalEthnic: parsed.culturalEthnic || 'Natural',
-      aestheticStyle: parsed.aestheticStyle,
-      portraitPrompt: parsed.portraitPrompt,
+      summary: parsed.summary || currentAppearance?.summary || `${charName} has a warm, natural, approachable appearance.`,
+      facialFeatures: parsed.facialFeatures || currentAppearance?.facialFeatures || 'Soft, kind, expressive features',
+      hairColorAndStyle: parsed.hairColorAndStyle || currentAppearance?.hairColorAndStyle || 'Natural hair',
+      eyeColor: parsed.eyeColor || currentAppearance?.eyeColor || 'Expressive eyes',
+      bodyType: parsed.bodyType || currentAppearance?.bodyType || 'Natural build',
+      clothingStyle: parsed.clothingStyle || currentAppearance?.clothingStyle || 'Comfortable modern casual',
+      ageRange: parsed.ageRange || currentAppearance?.ageRange || '25-27 years old (adult)',
+      culturalEthnic: parsed.culturalEthnic || currentAppearance?.culturalEthnic || 'Natural',
+      aestheticStyle: parsed.aestheticStyle || currentAppearance?.aestheticStyle || 'Modern casual',
+      portraitPrompt: parsed.portraitPrompt || `Close-up realistic portrait photo of ${charName}, photorealistic, natural lighting`,
       avatar: avatarUrl,
       lastUpdated: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     });
@@ -1031,10 +1303,10 @@ ${name} has ${hair.toLowerCase()}, ${eyes.toLowerCase()}, ${facial.toLowerCase()
 
   let avatar = current?.avatar;
   if (!avatar) {
-    if (isMale) avatar = '/src/assets/images/leo_portrait_1791848843424.jpg';
-    else if (name.toLowerCase() === 'maya') avatar = '/src/assets/images/maya_portrait_1791848859779.jpg';
-    else if (name.toLowerCase() === 'sam') avatar = '/src/assets/images/sam_portrait_1791848873751.jpg';
-    else avatar = '/src/assets/images/sophia_portrait_1791848825862.jpg';
+    if (isMale) avatar = '/assets/images/leo_portrait_1791848843424.jpg';
+    else if (name.toLowerCase() === 'maya') avatar = '/assets/images/maya_portrait_1791848859779.jpg';
+    else if (name.toLowerCase() === 'sam') avatar = '/assets/images/sam_portrait_1791848873751.jpg';
+    else avatar = '/assets/images/sophia_portrait_1791848825862.jpg';
   }
 
   return {
@@ -1102,7 +1374,7 @@ Task: Provide immediate, actionable, non-fluffy coaching guidance:
       },
     });
 
-    const parsed = JSON.parse(response.text?.trim() || '{}');
+    const parsed = safeParseJson(response.text, {});
     res.json(parsed);
   } catch (error: any) {
     console.warn('Life coach advice fallback activated:', error?.message);
@@ -1154,7 +1426,7 @@ Instructions:
       },
     });
 
-    const parsed = JSON.parse(response.text?.trim() || '{}');
+    const parsed = safeParseJson(response.text, {});
     res.json(parsed);
   } catch (error: any) {
     console.warn('Future self fallback activated:', error?.message);
@@ -1195,7 +1467,7 @@ Keep it 100% human, compassionate, and non-guilting. Provide 3 easy quick-reply 
       },
     });
 
-    const parsed = JSON.parse(response.text?.trim() || '{}');
+    const parsed = safeParseJson(response.text, {});
     res.json(parsed);
   } catch (error: any) {
     const name = req.body.companionName || 'Sophia';
@@ -1282,16 +1554,16 @@ Produce a complete profile including:
       },
     });
 
-    const parsed = JSON.parse(response.text?.trim() || '{}');
+    const parsed = safeParseJson(response.text, {});
     
     // Choose avatar based on archetype/aesthetic
     const avatar = archetype === 'mentor'
-      ? '/src/assets/images/marcus_mentor_portrait_1791853331555.jpg'
+      ? '/assets/images/marcus_mentor_portrait_1791853331555.jpg'
       : archetype === 'coach'
-      ? '/src/assets/images/elena_coach_portrait_1791853364898.jpg'
+      ? '/assets/images/elena_coach_portrait_1791853364898.jpg'
       : archetype === 'startup-founder'
-      ? '/src/assets/images/kai_founder_portrait_1791853347338.jpg'
-      : '/src/assets/images/sophia_portrait_1791848825862.jpg';
+      ? '/assets/images/kai_founder_portrait_1791853347338.jpg'
+      : '/assets/images/sophia_portrait_1791848825862.jpg';
 
     res.json({
       id: `custom-${Date.now()}`,
@@ -1326,7 +1598,7 @@ Produce a complete profile including:
       name: req.body.name || 'Rowan',
       relationship: archetype,
       archetype,
-      avatar: '/src/assets/images/marcus_mentor_portrait_1791853331555.jpg',
+      avatar: '/assets/images/marcus_mentor_portrait_1791853331555.jpg',
       persona: req.body.personaDescription || 'Sharp, thoughtful, grounded, candid',
       tastesAndQuirks: 'Loves analog notebooks, pour-over coffee, and direct feedback',
       specialties: req.body.specialties || ['Strategic Clarity', 'Empathetic Perspective'],
@@ -1353,44 +1625,51 @@ Produce a complete profile including:
 
 // Vite middleware in dev or static files in production
 async function setupViteOrStatic() {
+  // Unknown API routes return JSON 404 instead of falling through to index.html.
+  app.all('/api/*', (req, res) => {
+    res.status(404).json({ error: `Unknown API route: ${req.method} ${req.path}` });
+  });
+
   if (process.env.NODE_ENV === 'production') {
     app.use(express.static(path.resolve(__dirname, 'dist')));
-    app.get('*', (req, res) => {
+    // SPA fallback for non-API routes. A regex keeps this working on
+    // Express 4 and Express 5 (where '*' alone throws).
+    app.get(/.*/, (req, res, next) => {
+      if (req.path.startsWith('/api/')) return next();
       res.sendFile(path.resolve(__dirname, 'dist', 'index.html'));
     });
   } else {
     const { createServer } = await import('vite');
-  const vite = await createServer({
-    // Express owns the HTTP server in middleware mode, so Vite must not
-    // inject or serve its HMR client. The hosted preview has no Vite
-    // WebSocket endpoint, so allowing the client to load creates a reconnect
-    // error even though the application itself is healthy.
-    server: { middlewareMode: true, host: '0.0.0.0', port: 3000, hmr: false, ws: false },
-    appType: 'spa',
-    plugins: [
-      {
-        name: 'remove-vite-client-from-preview-html',
-        transformIndexHtml: {
-          order: 'post',
-          handler(html: string) {
-            return html
-              .replace(/<script[^>]*src=["'][^"']*\/\@vite\/(?:client|env)[^"']*["'][^>]*><\/script>/gi, '')
-              .replace(/(?:import|export)\s+[^;]*["']\/\@vite\/(?:client|env)[^"']*["'];?/gi, '')
-              .replace(/["']\/\@vite\/(?:client|env)[^"']*["']/gi, '');
+    const vite = await createServer({
+      // Express owns the HTTP server in middleware mode, so Vite must not
+      // inject or serve its HMR client. The hosted preview has no Vite
+      // WebSocket endpoint, so allowing the client to load creates a reconnect
+      // error even though the application itself is healthy.
+      server: { middlewareMode: true, hmr: false },
+      appType: 'spa',
+      plugins: [
+        {
+          name: 'remove-vite-client-from-preview-html',
+          transformIndexHtml: {
+            order: 'post',
+            handler(html: string) {
+              return html
+                .replace(/<script[^>]*src=["'][^"']*\/@vite\/(?:client|env)[^"']*["'][^>]*><\/script>/gi, '')
+                .replace(/(?:import|export)\s+[^;]*["']\/@vite\/(?:client|env)[^"']*["'];?/gi, '')
+                .replace(/["']\/@vite\/(?:client|env)[^"']*["']/gi, '');
+            },
           },
         },
-      },
-      },
-    ],
-  });
+      ],
+    });
 
-  // Also neutralize direct and query-string variants of the client path
-  // before Vite middleware sees them. This protects previews from stale HTML
-  // or an external refresh re-requesting the HMR client.
-  app.get(['/\@vite/client', '/\@vite/env'], (_req, res) => {
-    res.type('application/javascript').set('Cache-Control', 'no-store').send('export {};');
-  });
-  app.use(vite.middlewares);
+    // Also neutralize direct variants of the client path before Vite
+    // middleware sees them. This protects previews from stale HTML
+    // re-requesting the HMR client.
+    app.get(['/client', '/env'].map((p) => `/@vite${p}`), (_req, res) => {
+      res.type('application/javascript').set('Cache-Control', 'no-store').send('export {};');
+    });
+    app.use(vite.middlewares);
   }
 
   app.listen(PORT, '0.0.0.0', () => {

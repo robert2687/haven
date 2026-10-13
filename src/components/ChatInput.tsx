@@ -33,6 +33,22 @@ export interface AttachedAudioNote {
   mimeType: string;
 }
 
+interface SpeechRecognitionInstance {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onstart: (() => void) | null;
+  onend: (() => void) | null;
+  onerror: (() => void) | null;
+  onresult: ((event: SpeechRecognitionResultEvent) => void) | null;
+  start: () => void;
+  stop: () => void;
+}
+
+interface SpeechRecognitionResultEvent {
+  results: ArrayLike<ArrayLike<{ transcript: string }>>;
+}
+
 interface ChatInputProps {
   onSendMessage: (
     text: string,
@@ -78,9 +94,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animFrameRef = useRef<number | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
-  const timerIntervalRef = useRef<any>(null);
+  const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const recordingDurationRef = useRef<number>(0);
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+  const recognitionRef = useRef<{ stop: () => void } | null>(null);
 
   // Safe haptic feedback utility for mobile touch
   const triggerHaptic = (ms: number = 20) => {
@@ -125,6 +142,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   useEffect(() => {
     return () => {
       cleanupRecordingHardware();
+      try {
+        recognitionRef.current?.stop();
+      } catch {}
+      recognitionRef.current = null;
       if (previewAudioRef.current) {
         previewAudioRef.current.pause();
         previewAudioRef.current = null;
@@ -431,17 +452,27 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
   // Process a selected or dropped file into an attached photo
   const processImageFile = (file: File) => {
-    if (!file.type.startsWith('image/')) return;
+    if (!file.type.startsWith('image/')) {
+      setRecordingError('Only image files can be attached.');
+      return;
+    }
+    const MAX_FILE_BYTES = 12 * 1024 * 1024;
+    if (file.size > MAX_FILE_BYTES) {
+      setRecordingError('That image is too large (max 12 MB). Please choose a smaller file.');
+      return;
+    }
 
     const sizeInKB = Math.round(file.size / 1024);
     const sizeFormatted =
       sizeInKB > 1024 ? `${(sizeInKB / 1024).toFixed(1)} MB` : `${sizeInKB} KB`;
 
     const reader = new FileReader();
+    reader.onerror = () => setRecordingError('Could not read that image file.');
     reader.onload = (event) => {
       const originalDataUrl = event.target?.result as string;
 
       const img = new Image();
+      img.onerror = () => setRecordingError('That image file appears to be corrupt.');
       img.onload = () => {
         const MAX_DIM = 1400;
         let width = img.width;
@@ -577,14 +608,19 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   // Speech to Text Dictation toggle
   const toggleSpeechRecognition = () => {
     const SpeechRecognition =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      (window as unknown as { SpeechRecognition?: new () => SpeechRecognitionInstance; webkitSpeechRecognition?: new () => SpeechRecognitionInstance }).SpeechRecognition ||
+      (window as unknown as { webkitSpeechRecognition?: new () => SpeechRecognitionInstance }).webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
-      alert('Speech-to-text dictation is not supported in this browser.');
+      setRecordingError('Speech-to-text dictation is not supported in this browser.');
       return;
     }
 
     if (isDictating) {
+      try {
+        recognitionRef.current?.stop();
+      } catch {}
+      recognitionRef.current = null;
       setIsDictating(false);
       return;
     }
@@ -596,16 +632,24 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       recognition.lang = 'en-US';
 
       recognition.onstart = () => setIsDictating(true);
-      recognition.onend = () => setIsDictating(false);
-      recognition.onerror = () => setIsDictating(false);
-      recognition.onresult = (event: any) => {
+      recognition.onend = () => {
+        setIsDictating(false);
+        recognitionRef.current = null;
+      };
+      recognition.onerror = () => {
+        setIsDictating(false);
+        recognitionRef.current = null;
+      };
+      recognition.onresult = (event: SpeechRecognitionResultEvent) => {
         const transcript = event.results[0][0].transcript;
         if (transcript) {
           setText((prev) => (prev ? `${prev} ${transcript}` : transcript));
         }
       };
+      recognitionRef.current = recognition;
       recognition.start();
     } catch {
+      recognitionRef.current = null;
       setIsDictating(false);
     }
   };
@@ -829,7 +873,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             {/* Mobile Recording Mode Badge */}
             <div className="flex items-center gap-1.5 text-[11px] text-rose-300/80 font-medium">
               <Radio className="w-3.5 h-3.5 text-rose-400 animate-pulse" />
-              <span className="hidden xs:inline">Listening...</span>
+              <span className="hidden sm:inline">Listening...</span>
               <span className="text-slate-400 text-[10px] hidden sm:inline">
                 (Up to 5 min)
               </span>

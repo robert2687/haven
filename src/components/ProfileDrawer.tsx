@@ -187,10 +187,11 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
           emotionalModulation: modulation || voiceSettings.emotionalModulation,
         }),
       });
+      if (!res.ok) throw new Error(`Voice preview failed: ${res.status}`);
       const data = await res.json();
       if (data.audioUrl) {
         const audio = new Audio(data.audioUrl);
-        audio.play();
+        await audio.play().catch((e) => console.error('Voice preview playback failed', e));
       }
     } catch (err) {
       console.error('Failed to preview voice', err);
@@ -227,9 +228,21 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
     setCustomSummaryText(preset.appearance.summary);
   };
 
-  const handleCopySummary = () => {
+  const handleCopySummary = async () => {
     const textToCopy = `Name: ${companion.name}\n\nAppearance:\n${companion.appearance?.summary || ''}`;
-    navigator.clipboard.writeText(textToCopy);
+    try {
+      await navigator.clipboard.writeText(textToCopy);
+    } catch {
+      // Clipboard API unavailable (non-secure context): fall back to textarea select.
+      const ta = document.createElement('textarea');
+      ta.value = textToCopy;
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand('copy');
+      } catch {}
+      document.body.removeChild(ta);
+    }
     setCopiedSummary(true);
     setTimeout(() => setCopiedSummary(false), 2000);
   };
@@ -251,9 +264,10 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
     setIsGeneratingAppearance(true);
     setGeneratingStep('Analyzing preferences and visual interests...');
 
+    const stepTimers: ReturnType<typeof setTimeout>[] = [];
     try {
-      setTimeout(() => setGeneratingStep('Formulating vivid visual description...'), 500);
-      setTimeout(() => setGeneratingStep('Synthesizing facial features, style and aesthetic...'), 1100);
+      stepTimers.push(setTimeout(() => setGeneratingStep('Formulating vivid visual description...'), 500));
+      stepTimers.push(setTimeout(() => setGeneratingStep('Synthesizing facial features, style and aesthetic...'), 1100));
 
       const res = await fetch('/api/character-appearance', {
         method: 'POST',
@@ -269,16 +283,17 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
       });
 
       const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Failed to generate appearance');
 
       const newAppearance: CharacterAppearance = {
-        summary: data.summary || companion.appearance?.summary,
-        facialFeatures: data.facialFeatures || companion.appearance?.facialFeatures,
-        hairColorAndStyle: data.hairColorAndStyle || companion.appearance?.hairColorAndStyle,
-        eyeColor: data.eyeColor || companion.appearance?.eyeColor,
-        bodyType: data.bodyType || companion.appearance?.bodyType,
-        clothingStyle: data.clothingStyle || companion.appearance?.clothingStyle,
-        ageRange: data.ageRange || companion.appearance?.ageRange,
-        culturalEthnic: data.culturalEthnic || companion.appearance?.culturalEthnic,
+        summary: data.summary || companion.appearance?.summary || '',
+        facialFeatures: data.facialFeatures || companion.appearance?.facialFeatures || '',
+        hairColorAndStyle: data.hairColorAndStyle || companion.appearance?.hairColorAndStyle || '',
+        eyeColor: data.eyeColor || companion.appearance?.eyeColor || '',
+        bodyType: data.bodyType || companion.appearance?.bodyType || '',
+        clothingStyle: data.clothingStyle || companion.appearance?.clothingStyle || '',
+        ageRange: data.ageRange || companion.appearance?.ageRange || '',
+        culturalEthnic: data.culturalEthnic || companion.appearance?.culturalEthnic || '',
         aestheticStyle: data.aestheticStyle || selectedAesthetic,
         lastUpdated: data.lastUpdated || 'Just now',
       };
@@ -302,6 +317,7 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
     } catch (err) {
       console.error('Failed to generate appearance:', err);
     } finally {
+      stepTimers.forEach(clearTimeout);
       setIsGeneratingAppearance(false);
       setGeneratingStep('');
     }
@@ -369,7 +385,7 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
 
   const handleToggleGoalStatus = (id: string) => {
     const updatedGoals = (memoryProfile.goals || []).map((g) =>
-      g.id === id ? { ...g, status: g.status === 'in-progress' ? 'achieved' : ('in-progress' as any) } : g
+      g.id === id ? { ...g, status: g.status === 'in-progress' ? 'achieved' : ('in-progress' as MemoryGoal['status']) } : g
     );
     const updated: StructuredMemoryProfile = { ...memoryProfile, goals: updatedGoals };
     onUpdateCompanion({ ...companion, structuredMemory: updated });
@@ -1035,7 +1051,7 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
                       />
                       <select
                         value={newRelCloseness}
-                        onChange={(e) => setNewRelCloseness(e.target.value as any)}
+                        onChange={(e) => setNewRelCloseness(e.target.value as 'close' | 'family' | 'work' | 'pet')}
                         className="bg-slate-800 border border-slate-700 rounded-lg p-2 text-xs text-slate-100"
                       >
                         <option value="family">Family</option>
@@ -1131,7 +1147,7 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
                       />
                       <select
                         value={newGoalType}
-                        onChange={(e) => setNewGoalType(e.target.value as any)}
+                        onChange={(e) => setNewGoalType(e.target.value as 'short-term' | 'long-term')}
                         className="bg-slate-800 border border-slate-700 rounded-lg p-2 text-xs text-slate-100"
                       >
                         <option value="short-term">Short-Term</option>
@@ -1756,11 +1772,11 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
                     <button
                       key={engine.id}
                       type="button"
-                      onClick={() => handleUpdateVoiceSettings({ voiceEngine: engine.id as any })}
+                      onClick={() => handleUpdateVoiceSettings({ voiceEngine: engine.id as VoiceCompanionSettings['voiceEngine'] })}
                       className={`w-full p-3 rounded-xl border text-left transition-colors flex items-start justify-between ${
                         voiceSettings.voiceEngine === engine.id
                           ? 'bg-emerald-950/40 border-emerald-500 text-emerald-200'
-                          : 'bg-slate-900/80 border-slate-800 text-slate-300 hover:bg-slate-850'
+                          : 'bg-slate-900/80 border-slate-800 text-slate-300 hover:bg-slate-800'
                       }`}
                     >
                       <div className="space-y-0.5">

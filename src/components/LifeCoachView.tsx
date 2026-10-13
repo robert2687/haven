@@ -179,7 +179,7 @@ export const LifeCoachView: React.FC<LifeCoachViewProps> = ({
               className={`p-3 rounded-2xl border text-left transition-all ${
                 isActive
                   ? 'bg-slate-800 border-blue-500/80 shadow-md ring-1 ring-blue-500/30'
-                  : 'bg-slate-900/80 border-slate-800 hover:border-slate-700/80 hover:bg-slate-850'
+                  : 'bg-slate-900/80 border-slate-800 hover:border-slate-700/80 hover:bg-slate-800'
               }`}
             >
               <div className="flex items-center justify-between mb-1.5">

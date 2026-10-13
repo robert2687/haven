@@ -191,7 +191,7 @@ export const MarketplaceView: React.FC<MarketplaceViewProps> = ({
                     <div className="flex items-center justify-between gap-1">
                       <h3 className="text-base font-semibold text-white truncate">{comp.name}</h3>
                       <span className="text-[11px] font-medium text-slate-400 capitalize">
-                        {archetypeLabel.replace('-', ' ')}
+                        {archetypeLabel.replaceAll('-', ' ')}
                       </span>
                     </div>
                     {comp.title && (

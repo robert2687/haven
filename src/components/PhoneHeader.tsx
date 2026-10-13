@@ -9,8 +9,6 @@ import {
   Minimize2,
   Sun,
   Moon,
-  Activity,
-  Smile,
   HeartHandshake,
   Sparkles,
 } from 'lucide-react';
@@ -45,6 +43,9 @@ export const PhoneHeader: React.FC<PhoneHeaderProps> = ({
   onOpenStorylines,
   onTriggerProactiveCheckin,
 }) => {
+  const currentHour = new Date().getHours();
+  const isMorningHours = currentHour < 16;
+  const memoryCount = companion.memories?.length ?? 0;
   return (
     <header className="shrink-0 bg-slate-900/95 backdrop-blur-md border-b border-slate-800 select-none z-20">
 
@@ -60,6 +61,9 @@ export const PhoneHeader: React.FC<PhoneHeaderProps> = ({
               src={companion.avatar}
               alt={companion.name}
               referrerPolicy="no-referrer"
+              onError={(e) => {
+                e.currentTarget.src = '/assets/images/sophia_portrait_1791848825862.jpg';
+              }}
               className="w-10 h-10 rounded-full object-cover ring-2 ring-blue-500/30"
             />
             {/* Active green indicator */}
@@ -89,7 +93,7 @@ export const PhoneHeader: React.FC<PhoneHeaderProps> = ({
               title={`Mood Intelligence: ${companion.moodIntelligence?.dominantEmotion || 'Focused & Reflective'} (${companion.moodIntelligence?.happiness ?? 78}% Happiness)`}
             >
               <span>😊</span>
-              <span className="hidden xs:inline font-mono">{companion.moodIntelligence?.happiness ?? 78}%</span>
+              <span className="hidden sm:inline font-mono">{companion.moodIntelligence?.happiness ?? 78}%</span>
             </button>
           )}
 
@@ -98,13 +102,13 @@ export const PhoneHeader: React.FC<PhoneHeaderProps> = ({
             <button
               type="button"
               onClick={() => {
-                const hr = new Date().getHours();
-                onOpenDailyRoutine(hr < 16 ? 'morning' : 'evening');
+                onOpenDailyRoutine(isMorningHours ? 'morning' : 'evening');
               }}
               className="p-2 rounded-full hover:bg-slate-800 transition-colors"
               title="Daily Companion Mode: Morning priorities & Evening reflection"
+              aria-label="Open daily companion mode"
             >
-              {new Date().getHours() < 16 ? (
+              {isMorningHours ? (
                 <Sun className="w-4 h-4 text-amber-400 hover:scale-110 transition-transform" />
               ) : (
                 <Moon className="w-4 h-4 text-indigo-400 hover:scale-110 transition-transform" />
@@ -142,6 +146,7 @@ export const PhoneHeader: React.FC<PhoneHeaderProps> = ({
             onClick={onStartCall}
             className="p-2 rounded-full hover:bg-slate-800 hover:text-emerald-400 transition-colors"
             title={`Start voice call with ${companion.name} (Hands-Free Voice Companion)`}
+            aria-label={`Start voice call with ${companion.name}`}
           >
             <Phone className="w-4 h-4" />
           </button>
@@ -152,6 +157,8 @@ export const PhoneHeader: React.FC<PhoneHeaderProps> = ({
             onClick={onToggleSound}
             className="p-2 rounded-full hover:bg-slate-800 hover:text-slate-200 transition-colors"
             title={soundEnabled ? 'Mute sound effects' : 'Unmute sound effects'}
+            aria-label={soundEnabled ? 'Mute sound effects' : 'Unmute sound effects'}
+            aria-pressed={soundEnabled}
           >
             {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4 text-slate-500" />}
           </button>
@@ -161,10 +168,11 @@ export const PhoneHeader: React.FC<PhoneHeaderProps> = ({
             type="button"
             onClick={onOpenProfile}
             className="p-2 rounded-full hover:bg-slate-800 hover:text-blue-400 transition-colors relative"
-            title={`Personal Memory Engine: ${companion.memories.length} memories & life profile`}
+            title={`Personal Memory Engine: ${memoryCount} memories & life profile`}
+            aria-label={`Open memory engine, ${memoryCount} memories`}
           >
             <BookOpen className="w-4 h-4" />
-            {companion.memories.length > 0 && (
+            {memoryCount > 0 && (
               <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-blue-500 ring-1 ring-slate-900"></span>
             )}
           </button>
@@ -175,6 +183,7 @@ export const PhoneHeader: React.FC<PhoneHeaderProps> = ({
             onClick={onToggleFramed}
             className="p-2 rounded-full hover:bg-slate-800 hover:text-slate-200 transition-colors hidden sm:flex"
             title={isFramed ? 'Full screen view' : 'Phone frame view'}
+            aria-label={isFramed ? 'Switch to full screen view' : 'Switch to phone frame view'}
           >
             {isFramed ? <Maximize2 className="w-4 h-4" /> : <Minimize2 className="w-4 h-4" />}
           </button>
@@ -185,6 +194,7 @@ export const PhoneHeader: React.FC<PhoneHeaderProps> = ({
             onClick={onOpenProfile}
             className="p-2 rounded-full hover:bg-slate-800 hover:text-slate-200 transition-colors"
             title="Companion Settings & Customization"
+            aria-label="Open companion settings"
           >
             <Settings className="w-4 h-4" />
           </button>

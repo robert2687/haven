@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Play, Pause, Volume2, Smile, CheckCheck, Loader2 } from 'lucide-react';
-import { ChatMessage, MessageReaction } from '../types';
+import { ChatMessage } from '../types';
 
 interface MessageBubbleProps {
   message: ChatMessage;
@@ -24,20 +24,27 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   const isUser = message.role === 'user';
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
-  const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const [imageModalOpen, setImageModalOpen] = useState(false);
+
+  // Static waveform heights — memoized so bars don't flicker on re-render.
+  const waveformHeights = useMemo(
+    () => [40, 70, 95, 55, 80, 100, 60, 45, 90, 75, 40, 60, 85, 50, 65, 90],
+    []
+  );
 
   // Play audio toggle
   const togglePlayAudio = (url: string) => {
-    if (audioElement) {
+    const current = audioRef.current;
+    if (current) {
       if (isPlayingAudio) {
-        audioElement.pause();
+        current.pause();
         setIsPlayingAudio(false);
       } else {
-        if (audioElement.ended) {
-          audioElement.currentTime = 0;
+        if (current.ended) {
+          current.currentTime = 0;
         }
-        audioElement.play().then(() => {
+        current.play().then(() => {
           setIsPlayingAudio(true);
         }).catch((e) => {
           console.error('Audio playback failed', e);
@@ -52,7 +59,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
       audio.onpause = () => setIsPlayingAudio(false);
       audio.play().then(() => {
         setIsPlayingAudio(true);
-        setAudioElement(audio);
+        audioRef.current = audio;
       }).catch((e) => {
         console.error('Audio playback failed', e);
       });
@@ -73,11 +80,14 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
               <img
                 src={companionAvatar}
                 alt={companionName}
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                }}
                 className="w-7 h-7 rounded-full object-cover ring-1 ring-white/10"
               />
             ) : (
               <div className="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center text-xs font-semibold text-slate-200">
-                {companionName.charAt(0)}
+                {(companionName || '?').charAt(0).toUpperCase()}
               </div>
             )}
           </div>
@@ -127,10 +137,11 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
                   <div className="flex-1">
                     <div className="flex items-center gap-0.5 h-6">
-                      {/* Simulated Voice Waveform bars */}
-                      {[40, 70, 95, 55, 80, 100, 60, 45, 90, 75, 40, 60, 85, 50, 65, 90].map((h, i) => (
+                      {/* Voice waveform bars (static heights; pulse via CSS while playing) */}
+                      {waveformHeights.map((h, i) => (
                         <span
                           key={i}
+                          aria-hidden="true"
                           className={`w-1 rounded-full transition-all ${
                             isPlayingAudio
                               ? 'bg-blue-400 animate-pulse'
@@ -139,7 +150,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                               : 'bg-slate-400'
                           }`}
                           style={{
-                            height: `${isPlayingAudio ? Math.max(20, Math.round(h * Math.random())) : h}%`,
+                            height: `${h}%`,
                           }}
                         />
                       ))}
@@ -148,9 +159,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                       <span className={`text-[11px] font-mono ${isUser ? 'text-blue-100' : 'text-slate-400'}`}>
                         {isPlayingAudio ? 'Playing...' : isUser ? 'Voice note' : 'Voice memo'}
                       </span>
-                      {message.audioDuration ? (
+                      {typeof message.audioDuration === 'number' && message.audioDuration > 0 ? (
                         <span className={`text-[10.5px] font-mono ${isUser ? 'text-blue-200' : 'text-slate-400'}`}>
-                          {Math.floor(message.audioDuration / 60)}:{(message.audioDuration % 60).toString().padStart(2, '0')}
+                          {Math.floor(message.audioDuration / 60)}:{Math.floor(message.audioDuration % 60).toString().padStart(2, '0')}
                         </span>
                       ) : null}
                     </div>
@@ -168,7 +179,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
             ) : null}
 
             {/* Audio Voice Note action button for Companion's text bubbles */}
-            {!isUser && !message.audioUrl && (
+            {!isUser && !message.audioUrl && message.content.trim() && (
               <div className="mt-1.5 pt-1.5 border-t border-slate-700/50 flex items-center justify-between gap-2 text-xs">
                 <button
                   type="button"
@@ -176,6 +187,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                   disabled={isVoiceLoading}
                   className="flex items-center gap-1.5 text-slate-400 hover:text-blue-400 transition-colors py-0.5 text-[11.5px]"
                   title="Listen to voice note"
+                  aria-label={`Listen to voice note for message: ${message.content.slice(0, 60)}`}
                 >
                   {isVoiceLoading ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400" />
@@ -213,17 +225,19 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
             </div>
           )}
 
-          {/* Floating Action Trigger on hover */}
+          {/* Floating Action Trigger on hover/focus (also visible on touch) */}
           <div
-            className={`absolute top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 ${
+            className={`absolute top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-within:opacity-100 max-sm:opacity-100 transition-opacity flex items-center gap-1 ${
               isUser ? '-left-10' : '-right-10'
             }`}
           >
             <button
               type="button"
               onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+              aria-expanded={showEmojiPicker}
               className="p-1 rounded-full bg-slate-800/90 text-slate-400 hover:text-slate-100 hover:bg-slate-700 shadow-sm transition-colors"
               title="React"
+              aria-label="Add reaction"
             >
               <Smile className="w-4 h-4" />
             </button>
@@ -282,12 +296,18 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
       {/* Fullscreen image preview modal */}
       {imageModalOpen && message.image && (
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Expanded image attachment"
           className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4 backdrop-blur-xs"
           onClick={() => setImageModalOpen(false)}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') setImageModalOpen(false);
+          }}
         >
           <img
             src={`data:${message.image.mimeType};base64,${message.image.data}`}
-            alt="Expanded view"
+            alt={`Image attachment from ${isUser ? 'you' : companionName}`}
             className="max-h-[90vh] max-w-[90vw] object-contain rounded-xl shadow-2xl"
           />
         </div>

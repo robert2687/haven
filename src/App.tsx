@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { PhoneHeader } from './components/PhoneHeader';
 import { MessageBubble } from './components/MessageBubble';
 import { TypingIndicator } from './components/TypingIndicator';
@@ -55,9 +55,7 @@ import {
   Sparkles,
   Network,
   Users,
-  Award,
   Crown,
-  HeartHandshake,
 } from 'lucide-react';
 
 const STORAGE_KEY_COMPANION = 'haven_companion_profile_v1';
@@ -295,8 +293,15 @@ export default function App() {
 
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY_MESSAGES, JSON.stringify(messages));
-    } catch {}
+      // Strip base64 payloads before persisting: images/audio can exceed the
+      // ~5MB localStorage quota and break reloads. Keep text + metadata only.
+      const storable = messages.map((m) => ({
+        ...m,
+        image: m.image ? { mimeType: m.image.mimeType, data: '' } : undefined,
+        audioUrl: m.audioUrl && m.audioUrl.length < 200000 ? m.audioUrl : undefined,
+      }));
+      localStorage.setItem(STORAGE_KEY_MESSAGES, JSON.stringify(storable));
+    } catch {} // quota exceeded: keep in-memory messages, skip persistence
     if (activeView === 'companion') {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
@@ -482,22 +487,24 @@ export default function App() {
         });
       }
 
-      // Structured Memory deltas
+      // Structured Memory deltas (clone — never mutate previous state)
       if (memoryDeltas) {
         setCompanion((prev) => {
-          const prevMem = prev.structuredMemory || INITIAL_STRUCTURED_MEMORY;
-          let deltaToast = '';
+          const prevMem = prev.structuredMemory
+            ? {
+                ...prev.structuredMemory,
+                lifeProfile: { ...prev.structuredMemory.lifeProfile },
+                goals: [...(prev.structuredMemory.goals || [])],
+                relationships: [...(prev.structuredMemory.relationships || [])],
+                emotionalPatterns: [...(prev.structuredMemory.emotionalPatterns || [])],
+              }
+            : { ...INITIAL_STRUCTURED_MEMORY };
 
           if (memoryDeltas.lifeProfileUpdate) {
             prevMem.lifeProfile = {
               ...prevMem.lifeProfile,
               careerOrStudies: memoryDeltas.lifeProfileUpdate,
             };
-            deltaToast = memoryDeltas.lifeProfileUpdate;
-          }
-
-          if (memoryDeltas.goalUpdate) {
-            deltaToast = deltaToast || memoryDeltas.goalUpdate;
           }
 
           return {
@@ -565,6 +572,7 @@ export default function App() {
 
   // Audio voice note generator
   const handleRequestVoiceNote = async (messageId: string, text: string) => {
+    if (!text.trim()) return;
     setVoiceLoadingId(messageId);
     try {
       const res = await fetch('/api/voice-note', {
@@ -576,13 +584,14 @@ export default function App() {
           style: 'Warm, natural, conversational texting companion',
         }),
       });
+      if (!res.ok) throw new Error(`Voice note failed: ${res.status}`);
       const data = await res.json();
       if (data.audioUrl) {
         setMessages((prev) =>
           prev.map((m) => (m.id === messageId ? { ...m, audioUrl: data.audioUrl } : m))
         );
         const audio = new Audio(data.audioUrl);
-        audio.play();
+        await audio.play().catch((e) => console.error('Voice note playback failed', e));
       }
     } catch (err) {
       console.error('Failed to get voice note', err);

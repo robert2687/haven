@@ -68,10 +68,13 @@ export const DailyRoutineModal: React.FC<DailyRoutineModalProps> = ({
           }),
         });
         const data = await res.json();
+        if (!res.ok) throw new Error(data?.error || 'Failed to load routine');
         if (mode === 'morning') {
-          setMorningData(data);
+          if (Array.isArray(data.priorities)) setMorningData(data);
+          else throw new Error('Invalid morning routine shape');
         } else {
-          setEveningData(data);
+          if (Array.isArray(data.winsOfTheDay)) setEveningData(data);
+          else throw new Error('Invalid evening routine shape');
         }
       } catch (err) {
         console.error('Failed to load daily routine', err);
@@ -92,7 +95,7 @@ export const DailyRoutineModal: React.FC<DailyRoutineModalProps> = ({
   };
 
   const handleShareMorning = () => {
-    if (!morningData) return;
+    if (!morningData || !Array.isArray(morningData.priorities)) return;
     const priorityList = morningData.priorities.map((p, i) => `${i + 1}. ${p}`).join('\n');
     const msg = `🌅 Morning intention with ${companion.name}:\n\n${morningData.companionGreeting}\n\nToday's priorities:\n${priorityList}\n\nFocus: "${morningData.motivationQuote}"`;
     onSendToChat(msg);
@@ -100,7 +103,7 @@ export const DailyRoutineModal: React.FC<DailyRoutineModalProps> = ({
   };
 
   const handleShareEvening = () => {
-    if (!eveningData) return;
+    if (!eveningData || !Array.isArray(eveningData.winsOfTheDay)) return;
     const wins = eveningData.winsOfTheDay.join(', ');
     const note = userEveningNote.trim() ? `\nMy note: "${userEveningNote.trim()}"` : '';
     const msg = `🌙 Evening debrief with ${companion.name}:\n\nWins: ${wins}\nTomorrow's plan: ${eveningData.tomorrowPlanning}${note}`;
