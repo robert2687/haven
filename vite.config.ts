@@ -8,18 +8,33 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig(() => {
   return {
-    plugins: [react(), tailwindcss()],
+    plugins: [
+      react(),
+      tailwindcss(),
+      {
+        name: 'disable-preview-hmr-client',
+        transformIndexHtml: {
+          order: 'post',
+          handler(html) {
+            return html
+              .replace(/<script[^>]*src=["'][^"']*\/@vite\/(?:client|env)[^"']*["'][^>]*><\/script>/gi, '')
+              .replace(/(?:import|export)\s+[^;]*["']\/@vite\/(?:client|env)[^"']*["'];?/gi, '')
+              .replace(/["']\/@vite\/(?:client|env)[^"']*["']/gi, '');
+          },
+        },
+      },
+    ],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
       },
     },
     server: {
-      // HMR is disabled in AI Studio via DISABLE_HMR env var.
-      // Do not modify—file watching is disabled to prevent flickering during agent edits.
-      hmr: process.env.DISABLE_HMR !== 'true',
-      // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
-      watch: process.env.DISABLE_HMR === 'true' ? null : {},
+      // The app is served through Express middleware in the hosted preview,
+      // so Vite cannot own the WebSocket upgrade for HMR.
+      hmr: false,
+      // Keep the preview stable while files are synchronized by the host.
+      watch: null,
     },
   };
 });

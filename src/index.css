@@ -2,16 +2,52 @@
 
 @theme {
   --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --color-background: #0b0f17;
+  --color-foreground: #f7f4ee;
+  --color-card: #121923;
+  --color-card-foreground: #f7f4ee;
+  --color-popover: #121923;
+  --color-popover-foreground: #f7f4ee;
+  --color-primary: #d9a86c;
+  --color-primary-foreground: #20160d;
+  --color-secondary: #1c2733;
+  --color-secondary-foreground: #e9edf2;
+  --color-muted: #18212c;
+  --color-muted-foreground: #91a0ad;
+  --color-accent: #d9a86c;
+  --color-accent-foreground: #20160d;
+  --color-destructive: #d97878;
+  --color-border: rgba(218, 226, 234, 0.12);
+  --color-input: rgba(218, 226, 234, 0.16);
+  --color-ring: #d9a86c;
+}
+
+:root {
+  color-scheme: dark;
 }
 
 body {
   font-family: var(--font-sans);
-  background-color: #0b0f17;
-  color: #f1f5f9;
+  background-color: var(--color-background);
+  color: var(--color-foreground);
   -webkit-font-smoothing: antialiased;
   margin: 0;
   padding: 0;
   overflow-x: hidden;
+}
+
+button, input, textarea {
+  font: inherit;
+}
+
+button:focus-visible, input:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--color-ring);
+  outline-offset: 3px;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--color-primary) 35%, transparent);
+  color: var(--color-foreground);
 }
 
 /* Custom scrollbars */
