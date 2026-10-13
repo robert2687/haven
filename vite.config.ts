@@ -1,5 +1,4 @@
 import tailwindcss from '@tailwindcss/vite';
-import react from '@vitejs/plugin-react';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import {defineConfig} from 'vite';
@@ -10,9 +9,8 @@ export default defineConfig(() => {
   return {
     plugins: [
       // The hosted preview serves through Express without a Vite HMR websocket.
-      // Disable the React refresh preamble so it does not import createHotContext
-      // from the preview's incompatible /@vite/client shim.
-      react({ fastRefresh: false }),
+      // Vite's native JSX transform is sufficient here; the React plugin's
+      // refresh preamble imports createHotContext from /@vite/client.
       tailwindcss(),
       {
         name: 'disable-preview-hmr-client',
