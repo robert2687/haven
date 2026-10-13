@@ -11,17 +11,17 @@ python -m venv .venv
 # Windows: .venv\Scripts\activate | macOS/Linux: source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env   # then fill in keys
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
 ```
 
-Health check: `GET http://localhost:8000/health` (use for OpenShift
+Health check: `GET http://localhost:8080/health` (use for OpenShift
 readiness/liveness probes).
 
 ## Container
 
 ```bash
 docker build -t haven-backend .
-docker run -p 8000:8000 --env-file .env haven-backend
+docker run -p 8080:8080 --env-file .env haven-backend
 ```
 
 ## Env vars

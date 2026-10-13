@@ -6,7 +6,7 @@ alongside it until cutover.
 | Concern | Old | New |
 |---|---|---|
 | Frontend | Vite + React (`src/`) | Next.js 15 App Router (`frontend/`, deploy: Vercel, `NEXT_PUBLIC_API_URL`) |
-| Backend | Express `server.ts` (`npm run dev`, :3000) | FastAPI `backend/` (`uvicorn app.main:app`, :8000, OpenShift via `backend/Dockerfile`, probes: `GET /health`) |
+| Backend | Express `server.ts` (`npm run dev`, :3000) | FastAPI `backend/` (`uvicorn app.main:app`, :8080, OpenShift via `backend/Dockerfile`, probes: `GET /health`) |
 | Chat | `POST /api/chat` (Gemini/OpenRouter) | `backend/app/routers/chat.py` (OpenRouter; 501 otherwise) |
 | Streaming | `POST /api/chat/stream` (SSE) | Same path/event shapes in `routers/chat.py` |
 | Reasoning subagent | `POST /api/subagent` (Nemotron nano, nvidia pin) | `routers/subagent.py` (same model/pin, `reasoning_details` passthrough) |

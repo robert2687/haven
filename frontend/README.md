@@ -8,7 +8,7 @@ in `src/` or the Express `server.ts` — it is a separate deployable target for
 ## Prerequisites
 
 - Node.js 20+
-- A running Haven backend (local default `http://localhost:8000`)
+- A running Haven backend (local default `http://localhost:8080`)
 
 ## Getting started
 
@@ -32,7 +32,7 @@ npm run dev                  # http://localhost:3000
 
 | Variable               | Required | Purpose                                  |
 | ---------------------- | -------- | ---------------------------------------- |
-| `NEXT_PUBLIC_API_URL`  | No       | Backend base URL (default `http://localhost:8000`) |
+| `NEXT_PUBLIC_API_URL`  | No       | Backend base URL (default `http://localhost:8080`) |
 
 No secrets live in this repo — `.env.example` contains only the public
 backend URL. Never commit `.env.local`.

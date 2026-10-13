@@ -2,7 +2,7 @@
  * Typed client for the Haven backend (`server.ts`).
  *
  * Base URL comes from NEXT_PUBLIC_API_URL (public, no secrets).
- * Defaults to http://localhost:8000 for local backend dev.
+ * Defaults to http://localhost:8080 for local backend dev.
  */
 import type {
   ChatResponse,
@@ -17,7 +17,7 @@ const RAW_BASE =
   typeof process.env.NEXT_PUBLIC_API_URL === "string" &&
   process.env.NEXT_PUBLIC_API_URL.trim().length > 0
     ? process.env.NEXT_PUBLIC_API_URL.trim()
-    : "http://localhost:8000";
+    : "http://localhost:8080";
 
 export const API_URL = RAW_BASE.replace(/\/+$/, "");
 
