@@ -1,0 +1,1 @@
+{"description": "Cosine search over document_chunks via match_document_chunks RPC.", "endpoint": "POST /api/memory/search (chunks variant)", "input_schema": {"query": "string", "match_count": "int", "match_threshold": "float"}, "name": "chunk_search", "output": "[{id, document_id, content, similarity}]"}

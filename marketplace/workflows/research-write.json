@@ -1,0 +1,1 @@
+{"description": "Retrieve grounded context, then draft the answer with citations.", "name": "research-write", "steps": [{"agent": "research_agent", "output": "cited_draft", "with_tools": ["chunk_search"]}, {"agent": "companion_agent", "input_from": "cited_draft", "output": "final_reply"}]}

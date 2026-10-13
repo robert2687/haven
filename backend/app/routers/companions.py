@@ -19,8 +19,8 @@ from pydantic import BaseModel
 
 from ..config import get_settings
 from ..schemas import ChatRequest, safe_parse_json
+from ..services.edge_tts import MODULATION_PRESETS, resolve_edge_voice, synthesize_mp3
 from ..system_prompt import build_system_instruction
-from .tts import MODULATION_PRESETS, resolve_edge_voice, synthesize_mp3
 
 router = APIRouter()
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"

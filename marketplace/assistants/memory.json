@@ -1,0 +1,1 @@
+{"agent": "memory_agent", "description": "Extracts durable facts with importance scores.", "model": null, "name": "memory", "prompt": "../prompts/memory-extract.md", "title": "Memory Keeper", "tools": ["memory_search"]}

@@ -1,0 +1,1 @@
+{"agent": "sales_agent", "description": "Warm, direct outreach drafts that earn replies.", "model": null, "name": "sales", "prompt": "../prompts/sales-outreach.md", "title": "Outreach Drafter", "tools": []}

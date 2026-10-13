@@ -1,0 +1,1 @@
+{"agent": "research_agent", "description": "Grounded Q&A over your documents and memories.", "model": null, "name": "research", "prompt": "../prompts/research-grounded.md", "title": "Grounded Researcher", "tools": ["chunk_search", "memory_search"]}

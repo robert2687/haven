@@ -1,0 +1,1 @@
+{"agent": "companion_agent", "description": "Warm best-friend chat persona for daily check-ins.", "model": null, "name": "companion", "prompt": "../prompts/companion.md", "title": "Haven Companion", "tools": ["memory_search", "edge_tts"]}

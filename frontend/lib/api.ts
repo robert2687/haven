@@ -13,6 +13,8 @@ import type {
   SubagentTurn,
 } from "./types";
 
+import { PREF_BACKEND_URL, readPref } from "./prefs";
+
 const RAW_BASE =
   typeof process.env.NEXT_PUBLIC_API_URL === "string" &&
   process.env.NEXT_PUBLIC_API_URL.trim().length > 0
@@ -20,6 +22,12 @@ const RAW_BASE =
     : "http://localhost:8080";
 
 export const API_URL = RAW_BASE.replace(/\/+$/, "");
+
+/** Build-time default, overridable at runtime via Settings (no rebuild). */
+export function getApiUrl(): string {
+  const override = readPref(PREF_BACKEND_URL, "").replace(/\/+$/, "");
+  return override || API_URL;
+}
 
 async function parseError(res: Response): Promise<Error> {
   const text = await res.text().catch(() => "");
@@ -86,7 +94,7 @@ export async function sendChat(
   body: ChatRequestBody,
   signal?: AbortSignal,
 ): Promise<ChatResponse> {
-  const res = await fetch(`${API_URL}/api/chat`, {
+  const res = await fetch(`${getApiUrl()}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -120,7 +128,7 @@ export async function streamChat(
   body: ChatRequestBody,
   opts: StreamChatOptions = {},
 ): Promise<ChatStreamDone> {
-  const res = await fetch(`${API_URL}/api/chat/stream`, {
+  const res = await fetch(`${getApiUrl()}/api/chat/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -203,7 +211,7 @@ export async function callSubagent(
   req: SubagentRequest,
   signal?: AbortSignal,
 ): Promise<SubagentResult> {
-  const res = await fetch(`${API_URL}/api/subagent`, {
+  const res = await fetch(`${getApiUrl()}/api/subagent`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(req),
@@ -247,7 +255,7 @@ export async function synthEdgeTTS(
   req: EdgeTTSRequest,
   signal?: AbortSignal,
 ): Promise<EdgeTTSResult> {
-  const res = await fetch(`${API_URL}/api/edge-tts`, {
+  const res = await fetch(`${getApiUrl()}/api/edge-tts`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(req),
@@ -262,5 +270,37 @@ export async function synthEdgeTTS(
     audioUrl: data.audioUrl,
     voice: typeof data.voice === "string" ? data.voice : "",
     format: typeof data.format === "string" ? data.format : "audio/mp3",
+  };
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/stt
+// ---------------------------------------------------------------------------
+
+export interface STTResult {
+  text: string;
+  language?: string | null;
+  duration?: number | null;
+}
+
+/** POST /api/stt (multipart audio) -> { text, language, duration } */
+export async function transcribeAudio(
+  blob: Blob,
+  filename = "voice-note.webm",
+  signal?: AbortSignal,
+): Promise<STTResult> {
+  const form = new FormData();
+  form.append("audio", blob, filename);
+  const res = await fetch(`${getApiUrl()}/api/stt`, {
+    method: "POST",
+    body: form,
+    signal,
+  });
+  if (!res.ok) throw await parseError(res);
+  const data = (await res.json()) as Partial<STTResult>;
+  return {
+    text: typeof data.text === "string" ? data.text : "",
+    language: typeof data.language === "string" ? data.language : null,
+    duration: typeof data.duration === "number" ? data.duration : null,
   };
 }

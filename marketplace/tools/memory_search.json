@@ -1,0 +1,1 @@
+{"description": "Cosine search over memories via match_memories RPC.", "endpoint": "POST /api/memory/search", "input_schema": {"query_embedding": "float[]", "match_count": "int"}, "name": "memory_search", "output": "[{id, content, similarity}]"}

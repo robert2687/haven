@@ -1,0 +1,1 @@
+{"agent": "coding_agent", "description": "Minimal-diff implementation with verify steps.", "model": null, "name": "coding", "prompt": "../prompts/code-change.md", "title": "Code Implementer", "tools": []}

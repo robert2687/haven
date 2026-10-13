@@ -205,6 +205,8 @@ export default function ApiTestPage(): React.JSX.Element {
               <option value="Fenrir">Fenrir</option>
               <option value="Charon">Charon</option>
               <option value="en-US-AriaNeural">en-US-AriaNeural</option>
+              <option value="sk-SK-ViktoriaNeural">sk-SK-ViktoriaNeural</option>
+              <option value="sk-SK-LukasNeural">sk-SK-LukasNeural</option>
             </select>
             <Button onClick={() => void runTts()} disabled={ttsLoading}>
               {ttsLoading ? "Synthesizing…" : "Synthesize + play"}

@@ -1,0 +1,1 @@
+{"description": "Transcribe audio via Faster-Whisper base (25MB max).", "endpoint": "POST /api/stt", "input_schema": {"audio": "multipart file"}, "name": "stt_transcribe", "output": "{text, language, duration}"}

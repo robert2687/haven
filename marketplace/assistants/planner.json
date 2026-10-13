@@ -1,0 +1,1 @@
+{"agent": "planner_agent", "description": "Turns goals into ordered, verifiable step plans.", "model": null, "name": "planner", "prompt": "../prompts/planner.md", "title": "Task Planner", "tools": []}

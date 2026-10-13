@@ -1,0 +1,16 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: haven-backend
+  labels:
+    app: haven-backend
+spec:
+  to:
+    kind: Service
+    name: haven-backend
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+  # Result: https://haven-backend-<project>.<sandbox-domain> -> POST /api/*

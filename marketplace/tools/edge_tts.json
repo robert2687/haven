@@ -1,0 +1,1 @@
+{"description": "Synthesize speech; en-US + sk-SK voices (Lukas/Viktoria).", "endpoint": "POST /api/edge-tts", "input_schema": {"pitch": "string", "rate": "string", "text": "string", "voice": "string", "volume": "string"}, "name": "edge_tts", "output": "{audioUrl, voice, format}"}

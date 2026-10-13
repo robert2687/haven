@@ -14,6 +14,11 @@ import {
 } from "../lib/api";
 import type { ChatMessage, MoodAnalysis } from "../lib/types";
 import { cn } from "../lib/utils";
+import {
+  PREF_COMPANION_NAME,
+  PREF_USER_NAME,
+  readPref,
+} from "../lib/prefs";
 
 const DEFAULT_PERSONA = "warm, genuine, playfully witty, emotionally comforting";
 const DEFAULT_QUIRKS = "loves morning espresso walks, listens to indie folk";
@@ -47,8 +52,12 @@ function toErrorMessage(e: unknown): string {
 }
 
 export default function ChatPage(): React.JSX.Element {
-  const [companionName, setCompanionName] = useState("Sophia");
-  const [userName, setUserName] = useState("Alex");
+  const [companionName, setCompanionName] = useState(() =>
+    readPref(PREF_COMPANION_NAME, "Sophia"),
+  );
+  const [userName, setUserName] = useState(() =>
+    readPref(PREF_USER_NAME, "Alex"),
+  );
   const [messages, setMessages] = useState<ChatMessage[]>(INITIAL_MESSAGES);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);

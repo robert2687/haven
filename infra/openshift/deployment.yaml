@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: haven-backend
+  labels:
+    app: haven-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: haven-backend
+  template:
+    metadata:
+      labels:
+        app: haven-backend
+    spec:
+      containers:
+        - name: api
+          # Replace with your Sandbox registry image after `oc import-image` / `oc start-build`.
+          image: haven-backend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: PORT
+              value: "8080"
+            - name: AI_PROVIDER
+              value: openrouter
+            - name: OPENROUTER_API_KEY
+              valueFrom: { secretKeyRef: { name: haven-backend-env, key: OPENROUTER_API_KEY } }
+            - name: EMBEDDING_MODEL
+              valueFrom: { secretKeyRef: { name: haven-backend-env, key: EMBEDDING_MODEL } }
+            - name: SUPABASE_URL
+              valueFrom: { secretKeyRef: { name: haven-backend-env, key: SUPABASE_URL } }
+            - name: SUPABASE_KEY
+              valueFrom: { secretKeyRef: { name: haven-backend-env, key: SUPABASE_KEY } }
+            - name: STORAGE_BUCKET
+              valueFrom: { secretKeyRef: { name: haven-backend-env, key: STORAGE_BUCKET, optional: true } }
+            - name: SITE_URL
+              valueFrom: { secretKeyRef: { name: haven-backend-env, key: SITE_URL, optional: true } }
+            # Faster-Whisper downloads the base weights (~150MB) on first STT call.
+            - name: HF_HUB_CACHE
+              value: /tmp/hf-cache
+            - name: XDG_CACHE_HOME
+              value: /tmp/cache
+          resources:
+            requests: { cpu: 500m, memory: 512Mi }
+            # Sandbox-safe ceiling; STT (Faster-Whisper base) spikes at load time.
+            limits: { cpu: "2", memory: 2Gi }
+          readinessProbe:
+            httpGet: { path: /health, port: 8080 }
+            initialDelaySeconds: 20
+            periodSeconds: 15
+          livenessProbe:
+            httpGet: { path: /health, port: 8080 }
+            initialDelaySeconds: 30
+            periodSeconds: 30

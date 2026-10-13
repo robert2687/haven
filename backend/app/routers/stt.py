@@ -4,30 +4,18 @@ from __future__ import annotations
 
 import tempfile
 from pathlib import Path
-from typing import Any
 
-from fastapi import APIRouter, UploadFile
+from fastapi import APIRouter, Request, UploadFile
 from fastapi.exceptions import HTTPException
 from fastapi.responses import JSONResponse
+from starlette.datastructures import UploadFile as StarletteUploadFile
+
+from ..services.whisper import transcribe_file as _service_transcribe
 
 router = APIRouter()
 
-_model: Any = None
-
 MAX_AUDIO_BYTES = 25 * 1024 * 1024
 SAFE_SUFFIXES = {".wav", ".mp3", ".m4a", ".ogg", ".oga", ".flac", ".webm", ".mp4"}
-
-
-def _get_model() -> Any:
-    """Lazy-load the Base model once (keeps app import light)."""
-    global _model
-    if _model is None:
-        try:
-            from faster_whisper import WhisperModel
-        except ImportError as exc:
-            raise RuntimeError("faster-whisper package not installed") from exc
-        _model = WhisperModel("base")
-    return _model
 
 
 def _safe_suffix(filename: str | None) -> str:
@@ -46,12 +34,10 @@ async def _read_upload(audio: UploadFile) -> tuple[bytes, str]:
 
 def _transcribe_file(tmp_path: str) -> tuple[str, str, float]:
     try:
-        model = _get_model()
+        result = _service_transcribe(tmp_path)
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail=str(exc))
-    segments, info = model.transcribe(tmp_path, beam_size=5)
-    text = "".join(seg.text for seg in segments).strip()
-    return text, info.language, info.duration
+    return result.text, result.language, result.duration
 
 
 @router.post("/stt")
@@ -69,9 +55,15 @@ async def transcribe(audio: UploadFile) -> JSONResponse:
 
 
 @router.post("/speech")
-async def speech(file: UploadFile) -> JSONResponse:
-    """Minimal alias: { text }. Same hardened path as /stt."""
-    data, suffix = await _read_upload(file)
+async def speech(request: Request) -> JSONResponse:
+    """Minimal alias: { text }. Accepts the upload as `file` or `audio`."""
+    form = await request.form()
+    upload = form.get("file") or form.get("audio")
+    # NOTE: request.form() yields starlette's UploadFile, which is a different
+    # class from fastapi.UploadFile in recent versions — check both.
+    if not isinstance(upload, (UploadFile, StarletteUploadFile)):
+        raise HTTPException(status_code=400, detail="Audio file is required (field 'file' or 'audio')")
+    data, suffix = await _read_upload(upload)
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
         tmp.write(data)
         tmp_path = tmp.name

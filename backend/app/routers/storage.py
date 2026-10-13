@@ -29,7 +29,12 @@ async def upload(file: UploadFile, path: str | None = None) -> JSONResponse:
     data = await file.read()
     if not data:
         raise HTTPException(status_code=400, detail="File is required")
-    key = path or f"{uuid.uuid4().hex}-{file.filename or 'upload'}"
+    raw_key = (path or f"{uuid.uuid4().hex}-{file.filename or 'upload'}").replace("\\", "/")
+    # Sanitize: no absolute paths, no parent escapes, no empty segments.
+    parts = [p for p in raw_key.split("/") if p and p not in {".", ".."}]
+    key = "/".join(parts)
+    if not key:
+        raise HTTPException(status_code=400, detail="Invalid path")
     client.storage.from_(settings.storage_bucket).upload(
         key, data, {"content-type": file.content_type or "application/octet-stream"}
     )

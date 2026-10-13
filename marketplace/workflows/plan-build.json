@@ -1,0 +1,1 @@
+{"description": "Plan first, then implement the riskiest step's fallback-aware change.", "name": "plan-build", "steps": [{"agent": "planner_agent", "output": "plan"}, {"agent": "coding_agent", "input_from": "plan", "output": "diff"}]}

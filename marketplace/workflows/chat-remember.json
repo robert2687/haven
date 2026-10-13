@@ -1,0 +1,1 @@
+{"description": "Chat, then extract durable memories from the exchange.", "name": "chat-remember", "steps": [{"agent": "companion_agent", "output": "reply"}, {"agent": "memory_agent", "input_from": "reply", "output": "memories_json"}]}
