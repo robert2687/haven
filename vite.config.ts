@@ -17,9 +17,8 @@ export default defineConfig(() => {
           order: 'post',
           handler(html) {
             return html
-              .replace(/<script[^>]*src=["'][^"']*\/@vite\/(?:client|env)[^"']*["'][^>]*><\/script>/gi, '')
-              .replace(/(?:import|export)\s+[^;]*["']\/@vite\/(?:client|env)[^"']*["'];?/gi, '')
-              .replace(/["']\/@vite\/(?:client|env)[^"']*["']/gi, '');
+              .replace(/<script[^>]*src=["']\/?@vite\/client["'][^>]*><\/script>/gi, '')
+              .replace(/<script[^>]*src=["'][^"']*\/@vite\/client[^"']*["'][^>]*><\/script>/gi, '');
           },
         },
       },
