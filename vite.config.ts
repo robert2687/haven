@@ -13,8 +13,13 @@ export default defineConfig(() => {
       tailwindcss(),
       {
         name: 'disable-preview-hmr-client',
-        transformIndexHtml(html) {
-          return html.replace(/<script[^>]+src=["']\/@vite\/client["'][^>]*><\/script>/g, '');
+        transformIndexHtml: {
+          order: 'post',
+          handler(html) {
+            return html
+              .replace(/<script[^>]*src=["']\/?@vite\/client["'][^>]*><\/script>/gi, '')
+              .replace(/<script[^>]*src=["'][^"']*\/@vite\/client[^"']*["'][^>]*><\/script>/gi, '');
+          },
         },
       },
     ],
