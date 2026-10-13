@@ -8,7 +8,16 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig(() => {
   return {
-    plugins: [react(), tailwindcss()],
+    plugins: [
+      react(),
+      tailwindcss(),
+      {
+        name: 'disable-preview-hmr-client',
+        transformIndexHtml(html) {
+          return html.replace(/<script[^>]+src=["']\/@vite\/client["'][^>]*><\/script>/g, '');
+        },
+      },
+    ],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
