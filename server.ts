@@ -1367,6 +1367,13 @@ async function setupViteOrStatic() {
       server: { middlewareMode: true, host: '0.0.0.0', port: 3000, hmr: false },
       appType: 'spa',
     });
+
+    // Express owns the HTTP server, so there is no Vite WebSocket endpoint
+    // for the injected client to connect to. Return a harmless module for
+    // stale preview pages that still request /@vite/client.
+    app.get('/@vite/client', (_req, res) => {
+      res.type('application/javascript').send('export {};');
+    });
     app.use(vite.middlewares);
   }
 
