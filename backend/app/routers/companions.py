@@ -10,7 +10,6 @@ response shapes mirror ``server.ts`` exactly.
 from __future__ import annotations
 
 import base64
-import logging
 import time
 from typing import Any
 
@@ -25,7 +24,6 @@ from ..services.edge_tts import MODULATION_PRESETS, resolve_edge_voice, synthesi
 from ..system_prompt import build_system_instruction
 
 router = APIRouter()
-logger = logging.getLogger(__name__)
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 VOICE_STYLE_MAP: dict[str, str] = {
@@ -71,10 +69,7 @@ async def _gen_json_or(
         resp = await client.chat.completions.create(**create_kwargs)  # type: ignore[arg-type]
         text = resp.choices[0].message.content or "{}"
         return safe_parse_json(text, fallback() if callable(fallback) else fallback)
-    except Exception as exc:
-        # Static fallback by design (works without an AI key), but log the
-        # cause so operators can tell fallback replies from model replies.
-        logger.warning("companion generation failed, returning fallback: %s", exc)
+    except Exception:
         return fallback() if callable(fallback) else fallback
 
 

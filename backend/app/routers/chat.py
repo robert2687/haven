@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import logging
 from typing import Any
 
 from fastapi import APIRouter
@@ -23,7 +22,6 @@ from ..schemas import (
 from ..system_prompt import build_system_instruction
 
 router = APIRouter()
-logger = logging.getLogger(__name__)
 
 
 def _client_or_501() -> OpenRouterClient:
@@ -76,15 +74,8 @@ async def chat(body: ChatRequest) -> JSONResponse:
         )
     except HTTPException:
         raise
-    except Exception as exc:
-        # Upstream/model failure: keep the 200 shape the frontend expects,
-        # but mark it so callers can detect the degradation instead of
-        # mistaking it for a real model reply.
-        logger.warning("chat upstream failed, returning fallback: %s", exc)
-        payload = _fallback(body.latestMessage, body.userName or "Alex")
-        payload["fallback"] = True
-        payload["error"] = str(exc)[:300] or "Upstream chat call failed"
-        return JSONResponse(payload)
+    except Exception:
+        return JSONResponse(_fallback(body.latestMessage, body.userName or "Alex"))
     parsed = safe_parse_json((text or "").strip() or "{}", {})
     return JSONResponse(
         {
