@@ -1,5 +1,4 @@
 import tailwindcss from '@tailwindcss/vite';
-import react from '@vitejs/plugin-react';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import {defineConfig} from 'vite';
@@ -9,7 +8,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export default defineConfig(() => {
   return {
     plugins: [
-      react(),
+      // JSX is handled by Vite's esbuild transform. Omitting the React plugin
+      // keeps the hosted Express preview from injecting Fast Refresh imports.
+
       tailwindcss(),
       {
         name: 'disable-preview-hmr-client',
