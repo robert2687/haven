@@ -1370,11 +1370,15 @@ async function setupViteOrStatic() {
     plugins: [
       {
         name: 'remove-vite-client-from-preview-html',
-        transformIndexHtml(html: string) {
-          return html
-            .replace(/<script[^>]*src=["'][^"']*\/@vite\/client[^"']*["'][^>]*><\/script>/gi, '')
-            .replace(/<script[^>]*src=["'][^"']*\/@vite\/env[^"']*["'][^>]*><\/script>/gi, '');
+        transformIndexHtml: {
+          order: 'post',
+          handler(html: string) {
+            return html
+              .replace(/<script[^>]*src=["'][^"']*\/\@vite\/client[^"']*["'][^>]*><\/script>/gi, '')
+              .replace(/<script[^>]*src=["'][^"']*\/\@vite\/env[^"']*["'][^>]*><\/script>/gi, '');
+          },
         },
+      },
       },
     ],
   });
