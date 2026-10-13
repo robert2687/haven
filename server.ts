@@ -1368,13 +1368,13 @@ async function setupViteOrStatic() {
       appType: 'spa',
     });
 
-    // Express owns the HTTP server, so there is no Vite WebSocket endpoint
-    // for the injected client to connect to. Return a harmless module for
-    // stale preview pages that still request /@vite/client.
-    app.get('/@vite/client', (_req, res) => {
-      res.type('application/javascript').send('export {};');
-    });
-    app.use(vite.middlewares);
+  // Express owns the HTTP server, so there is no Vite WebSocket endpoint.
+  // Intercept the client path before Vite's middleware so stale preview HTML
+  // cannot load the HMR client and attempt a WebSocket connection.
+  app.use('/@vite/client', (_req, res) => {
+    res.type('application/javascript').set('Cache-Control', 'no-store').send('export {};');
+  });
+  app.use(vite.middlewares);
   }
 
   app.listen(PORT, '0.0.0.0', () => {
