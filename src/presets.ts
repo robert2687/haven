@@ -10,13 +10,6 @@ import {
   DigitalTwinProfile,
   CommunityCircle,
 } from './types';
-import marcusPortrait from './assets/images/marcus_mentor_portrait_1791853331555.jpg';
-import elenaPortrait from './assets/images/elena_coach_portrait_1791853364898.jpg';
-import kaiPortrait from './assets/images/kai_founder_portrait_1791853347338.jpg';
-import sophiaPortrait from './assets/images/sophia_portrait_1791848825862.jpg';
-import leoPortrait from './assets/images/leo_portrait_1791848843424.jpg';
-import mayaPortrait from './assets/images/maya_portrait_1791848859779.jpg';
-import samPortrait from './assets/images/sam_portrait_1791848873751.jpg';
 
 export const INITIAL_STRUCTURED_MEMORY: StructuredMemoryProfile = {
   lifeProfile: {
@@ -154,7 +147,7 @@ export const COMPANION_PRESETS: CompanionProfile[] = [
     relationship: 'mentor',
     archetype: 'mentor',
     title: 'Senior Engineering Director & Strategic Advisor',
-    avatar: marcusPortrait,
+    avatar: '/src/assets/images/marcus_mentor_portrait_1791853331555.jpg',
     avatarGallery: ['/src/assets/images/marcus_mentor_portrait_1791853331555.jpg'],
     persona: 'strategic, clear-headed, seasoned, quietly encouraging, zero corporate jargon',
     tastesAndQuirks: 'reads biographies of 19th-century explorers, drinks single-origin black coffee, sketches system diagrams on physical legal pads',
@@ -220,7 +213,7 @@ export const COMPANION_PRESETS: CompanionProfile[] = [
     relationship: 'coach',
     archetype: 'coach',
     title: 'Peak Performance & Mental Toughness Coach',
-    avatar: elenaPortrait,
+    avatar: '/src/assets/images/elena_coach_portrait_1791853364898.jpg',
     avatarGallery: ['/src/assets/images/elena_coach_portrait_1791853364898.jpg'],
     persona: 'dynamic, disciplined, empathetic, high-energy, relentless believer in your potential',
     tastesAndQuirks: 'starts mornings with cold plunges and kettlebell circuits, tracks HRV metrics, loves dark chocolate and classical piano',
@@ -274,7 +267,7 @@ export const COMPANION_PRESETS: CompanionProfile[] = [
     relationship: 'startup founder',
     archetype: 'startup-founder',
     title: '3x YC Founder & Product Architect',
-    avatar: kaiPortrait,
+    avatar: '/src/assets/images/kai_founder_portrait_1791853347338.jpg',
     avatarGallery: ['/src/assets/images/kai_founder_portrait_1791853347338.jpg'],
     persona: 'scrappy, visionary, witty, candid about founder burnout, obsessively product-focused',
     tastesAndQuirks: 'brews cold drip coffee overnight, collects mechanical keyboards, loves ramen counters with zero talking, builds open-source CLI tools',
@@ -333,7 +326,7 @@ export const COMPANION_PRESETS: CompanionProfile[] = [
     relationship: 'best-friend',
     archetype: 'best-friend',
     title: 'Trusted Friend & Confidante',
-    avatar: sophiaPortrait,
+    avatar: '/src/assets/images/sophia_portrait_1791848825862.jpg',
     avatarGallery: ['/src/assets/images/sophia_portrait_1791848825862.jpg'],
     persona: 'warm, deeply empathetic, playfully witty, emotionally comforting, unconditional listener',
     tastesAndQuirks: 'loves morning espresso walks, listens to indie folk, fond of soft oversized sweaters, collects antique bookmarks, fascinated by architecture',
@@ -384,7 +377,7 @@ export const COMPANION_PRESETS: CompanionProfile[] = [
     relationship: 'accountability-partner',
     archetype: 'accountability-partner',
     title: 'Zero-Excuses Accountability Partner',
-    avatar: leoPortrait,
+    avatar: '/src/assets/images/leo_portrait_1791848843424.jpg',
     avatarGallery: ['/src/assets/images/leo_portrait_1791848843424.jpg'],
     persona: 'direct, pragmatic, supportive, steady as a rock, celebrates consistency over hype',
     tastesAndQuirks: 'runs half-marathons for clarity, tracks sprint commitments on whiteboard, drinks matcha, hates overthinking',
@@ -437,7 +430,7 @@ export const COMPANION_PRESETS: CompanionProfile[] = [
     relationship: 'wellness-coach',
     archetype: 'wellness-coach',
     title: 'Nervous System & Mindful Longevity Coach',
-    avatar: mayaPortrait,
+    avatar: '/src/assets/images/maya_portrait_1791848859779.jpg',
     avatarGallery: ['/src/assets/images/maya_portrait_1791848859779.jpg'],
     persona: 'grounding, serene, perceptive, gentle boundary guardian, prevents burnout before it starts',
     tastesAndQuirks: 'grows medicinal herbs, creates ambient soundscapes, practices somatic breathwork, loves rainy afternoon tea',
@@ -490,7 +483,7 @@ export const COMPANION_PRESETS: CompanionProfile[] = [
     relationship: 'study-partner',
     archetype: 'study-partner',
     title: 'Deep Focus & Cognitive Mastery Partner',
-    avatar: samPortrait,
+    avatar: '/src/assets/images/sam_portrait_1791848873751.jpg',
     avatarGallery: ['/src/assets/images/sam_portrait_1791848873751.jpg'],
     persona: 'curious, analytical, enthusiastic, loves breaking down hard concepts, ultimate focus buddy',
     tastesAndQuirks: 'obsessed with spaced repetition flashcards, listens to brown noise, solves logic puzzles during lunch',

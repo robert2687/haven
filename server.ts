@@ -1380,6 +1380,7 @@ async function setupViteOrStatic() {
           },
         },
       },
+      },
     ],
   });
 
@@ -1387,20 +1388,7 @@ async function setupViteOrStatic() {
   // before Vite middleware sees them. This protects previews from stale HTML
   // or an external refresh re-requesting the HMR client.
   app.get(['/\@vite/client', '/\@vite/env'], (_req, res) => {
-    res.type('application/javascript').set('Cache-Control', 'no-store').send(`
-    export function createHotContext() {
-      return {
-        accept() {},
-        dispose() {},
-        prune() {},
-        invalidate() {},
-        on() {},
-        send() {},
-      };
-    }
-    export function updateStyle() {}
-    export function removeStyle() {}
-  `);
+    res.type('application/javascript').set('Cache-Control', 'no-store').send('export {};');
   });
   app.use(vite.middlewares);
   }
