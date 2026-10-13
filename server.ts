@@ -3,6 +3,13 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { GoogleGenAI, Type } from '@google/genai';
+import { execFile as execFileCb } from 'child_process';
+import { randomUUID } from 'crypto';
+import fs from 'fs/promises';
+import os from 'os';
+import { promisify } from 'util';
+
+const execFileAsync = promisify(execFileCb);
 
 dotenv.config();
 
@@ -798,6 +805,96 @@ app.post('/api/subagent', async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error('Subagent error:', error?.message);
     res.status(500).json({ error: error?.message || 'Subagent call failed' });
+  }
+});
+
+// POST /api/edge-tts: TTS via Microsoft Edge (edge-tts CLI) alongside Gemini.
+// Body: { text, voice?: HavenVoiceName | EdgeVoiceName, rate?, volume?, pitch?, emotionalModulation? }
+//   voice accepts Haven names (Zephyr/Kore/Puck/Fenrir/Charon), a full Edge
+//   voice (e.g. en-US-AriaNeural), or "locale:xx-YY" for a default per locale.
+// Returns: { audioUrl: "data:audio/mp3;base64,...", voice, format: "audio/mp3" }
+const EDGE_VOICE_MAP: Record<string, string> = {
+  zephyr: 'en-US-GuyNeural',
+  kore: 'en-US-AriaNeural',
+  puck: 'en-US-ChristopherNeural',
+  fenrir: 'en-US-EricNeural',
+  charon: 'en-US-RogerNeural',
+};
+
+const EDGE_MODULATION_PRESETS: Record<string, { rate: string; pitch: string; volume: string }> = {
+  warm: { rate: '-5%', pitch: '-2Hz', volume: '+0%' },
+  playful: { rate: '+10%', pitch: '+4Hz', volume: '+0%' },
+  calm: { rate: '-10%', pitch: '-4Hz', volume: '+0%' },
+  'late-night': { rate: '-15%', pitch: '-6Hz', volume: '-10%' },
+  encouraging: { rate: '+5%', pitch: '+2Hz', volume: '+0%' },
+};
+
+function resolveEdgeVoice(input: unknown): string {
+  const fallback = 'en-US-AriaNeural';
+  if (typeof input !== 'string' || !input.trim()) return fallback;
+  const v = input.trim();
+  const haven = EDGE_VOICE_MAP[v.toLowerCase()];
+  if (haven) return haven;
+  if (/^[a-z]{2}-[A-Z]{2}-[A-Za-z]+Neural$/.test(v)) return v;
+  const localeMatch = /^locale:([a-z]{2}-[A-Z]{2})$/.exec(v);
+  if (localeMatch) return `${localeMatch[1]}-AriaNeural`;
+  return fallback;
+}
+
+function validEdgeAdjust(value: unknown, pattern: RegExp, fallback: string): string {
+  return typeof value === 'string' && pattern.test(value) ? value : fallback;
+}
+
+app.post('/api/edge-tts', async (req: Request, res: Response) => {
+  const tmpFile = path.join(os.tmpdir(), `haven-edge-tts-${randomUUID()}.mp3`);
+  try {
+    const { text, voice, rate, volume, pitch, emotionalModulation } = req.body as {
+      text?: unknown;
+      voice?: unknown;
+      rate?: unknown;
+      volume?: unknown;
+      pitch?: unknown;
+      emotionalModulation?: string;
+    };
+    if (typeof text !== 'string' || !text.trim()) {
+      res.status(400).json({ error: 'Text is required for edge TTS' });
+      return;
+    }
+    const preset = (emotionalModulation && EDGE_MODULATION_PRESETS[emotionalModulation]) || null;
+    const resolvedVoice = resolveEdgeVoice(voice);
+    const resolvedRate = validEdgeAdjust(rate ?? preset?.rate, /^[+-]\d+%$/, '+0%');
+    const resolvedVolume = validEdgeAdjust(volume ?? preset?.volume, /^[+-]\d+%$/, '+0%');
+    const resolvedPitch = validEdgeAdjust(pitch ?? preset?.pitch, /^[+-]\d+Hz$/, '+0Hz');
+
+    await execFileAsync('edge-tts', [
+      '--text',
+      text.trim().slice(0, 5000),
+      '--voice',
+      resolvedVoice,
+      '--rate',
+      resolvedRate,
+      '--volume',
+      resolvedVolume,
+      '--pitch',
+      resolvedPitch,
+      '--write-media',
+      tmpFile,
+    ], { timeout: 90000 });
+
+    const audio = await fs.readFile(tmpFile);
+    res.json({
+      audioUrl: `data:audio/mp3;base64,${audio.toString('base64')}`,
+      voice: resolvedVoice,
+      format: 'audio/mp3',
+    });
+  } catch (error: any) {
+    console.error('Edge TTS error:', error?.message);
+    const msg = /ENOENT/.test(error?.message || '')
+      ? 'edge-tts CLI not found on server PATH (pip install edge-tts)'
+      : error?.message || 'Edge TTS synthesis failed';
+    res.status(500).json({ error: msg });
+  } finally {
+    await fs.unlink(tmpFile).catch(() => {});
   }
 });
 
